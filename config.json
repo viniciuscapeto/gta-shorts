@@ -1,0 +1,110 @@
+{
+  "max_cortes_por_video": 6,
+  "segundos_antes_do_pico": 14,
+  "segundos_depois_do_pico": 10,
+  "sensibilidade_minima_db": 4,
+  "recorte_laterais": 0.78,
+  "letras_por_linha": 18,
+  "fonte": "C:/Windows/Fonts/ariblk.ttf",
+  "seu_arroba": "@seuperfil",
+
+  "narracao": {
+    "ativar": true,
+    "voz": "pt-BR-AntonioNeural",
+    "velocidade": "+12%",
+    "tom": "+0Hz",
+    "volume_da_voz": 1.0,
+    "volume_do_jogo_na_fala": 0.3,
+    "falar_gancho_no_inicio": true,
+    "falas_fim": [
+      "Segue pra mais GTA 6 todo dia.",
+      "Comenta aí o que você faria.",
+      "Curte se você também já quer jogar.",
+      "Manda pro amigo que vai comprar o GTA 6.",
+      "Parte dois? Comenta aí.",
+      "Segue que amanhã tem mais."
+    ],
+    "falas_fim_curiosidade": [
+      "Segue pra mais curiosidades de GTA.",
+      "Você sabia dessa? Comenta aí.",
+      "Manda pra quem é fã de GTA.",
+      "Segue que amanhã tem outra."
+    ]
+  },
+
+  "legenda": {
+    "ativar": true,
+    "modelo": "small",
+    "idioma_do_jogo": "auto",
+    "traduzir_para": "pt",
+    "fonte": "Arial Black",
+    "tamanho_fonte": 58,
+    "tamanho_fonte_narracao": 76,
+    "contorno": 7,
+    "letras_por_linha": 20,
+    "max_letras_por_legenda": 40,
+    "altura_do_rodape": 430,
+    "cor_destaque": "&H0000E5FF",
+    "cor_palavra_falada": "&H0000E5FF",
+    "legendar_narracao": true,
+    "letras_por_bloco_narracao": 18,
+    "letras_por_linha_narracao": 14
+  },
+
+  "curiosidades": [
+    {
+      "gancho": "Você sabia que o GTA 5 fez um bilhão de dólares em três dias?",
+      "texto_tela": "1 bilhão em 3 dias",
+      "texto": "Quando lançou, em 2013, o GTA 5 bateu um bilhão de dólares em vendas em apenas três dias. Foi o produto de entretenimento que mais rápido chegou nessa marca, mais rápido que qualquer filme da época."
+    },
+    {
+      "gancho": "O GTA 5 saiu em três gerações de console.",
+      "texto_tela": "O jogo que não morre",
+      "texto": "Ele lançou no PS3 e no Xbox 360, voltou no PS4 e no Xbox One, e depois ganhou versão de PS5 e Xbox Series. Pouquíssimos jogos atravessaram três gerações vendendo tanto."
+    },
+    {
+      "gancho": "Los Santos não é uma cidade inventada do zero.",
+      "texto_tela": "Los Santos é real?",
+      "texto": "A cidade do GTA 5 é inspirada em Los Angeles. Vinewood é Hollywood, Vespucci é Venice Beach, e a placa de Vinewood nas colinas imita a famosa placa de Hollywood."
+    },
+    {
+      "gancho": "O mistério do Monte Chiliad deixou jogadores obcecados por anos.",
+      "texto_tela": "O mistério do Chiliad",
+      "texto": "No topo do Monte Chiliad existe um mural com um OVNI, um ovo e um jetpack. Os jogadores passaram anos procurando o jetpack, e até hoje esse mistério é um dos mais famosos da história do GTA."
+    },
+    {
+      "gancho": "O primeiro trailer do GTA 6 quebrou um recorde mundial.",
+      "texto_tela": "Recorde do trailer",
+      "texto": "Em dezembro de 2023, o trailer do GTA 6 passou de noventa milhões de visualizações em vinte e quatro horas, o maior número para um vídeo que não é de música no YouTube."
+    },
+    {
+      "gancho": "O GTA 6 volta pra Vice City, mas maior.",
+      "texto_tela": "Bem-vindo a Leonida",
+      "texto": "O jogo se passa no estado de Leonida, inspirado na Flórida, e Vice City é a cidade principal. E pela primeira vez na era moderna da série, uma das protagonistas é uma mulher, a Lucia."
+    }
+  ],
+
+  "ganchos": [
+    "Espera o final...",
+    "Isso não era pra acontecer",
+    "GTA 6 é muito realista",
+    "Ninguém tá falando disso no GTA 6",
+    "A polícia do GTA 6 não brinca",
+    "Olha o que a física do GTA 6 faz",
+    "Eu só queria comprar um café",
+    "Vice City não perdoa",
+    "Pior decisão da minha vida",
+    "Não tenta isso no GTA 6",
+    "A IA do GTA 6 é outro nível",
+    "Rockstar caprichou nisso aqui"
+  ],
+
+  "titulos": [
+    "{gancho} #GTA6",
+    "{gancho} | GTA 6 no PS5",
+    "{gancho} 😳 GTA 6",
+    "GTA 6: {gancho}"
+  ],
+
+  "hashtags": ["#gta6", "#gtavi", "#gta", "#vicecity", "#ps5", "#gameplay", "#games", "#fyp", "#viral", "#shorts"]
+}

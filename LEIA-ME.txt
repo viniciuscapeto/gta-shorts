@@ -1,0 +1,71 @@
+FÁBRICA DE SHORTS - GTA 6
+=========================
+
+1) GRAVAR NO PS5
+   - Configurações > Capturas e transmissões > Capturas:
+       * Tipo de arquivo de vídeo: MP4
+       * Resolução: 1080p (4K é pesado e não faz diferença no celular)
+       * Áudio: incluir só o áudio do jogo (sem o chat da party)
+   - Botão "Criar" > "Iniciar nova gravação" (grava até 1 hora)
+     ou, quando acontecer algo legal, "Salvar clipe recente".
+
+2) PASSAR PRO PC
+   - Pendrive formatado em exFAT: Galeria de mídia > selecionar > Copiar para USB.
+
+3) GERAR OS SHORTS
+   - Coloque os vídeos na pasta  entrada\
+   - Dois cliques em  rodar.bat
+   - Os vídeos prontos (vertical 9:16) aparecem em  saida\
+     junto com um .txt de título + legenda + hashtags pra copiar.
+
+OUTROS MODOS (no terminal, dentro desta pasta)
+   python fabrica.py --listar    só mostra os momentos que achou, sem renderizar
+   python fabrica.py --manual    corta exatamente o que você escrever em cortes.csv
+                                  (útil pra aquele momento bom que a máquina não pegou)
+   python fabrica.py --testar-voz  gera saida\teste_voz.wav pra ouvir a voz
+   python fabrica.py --sem-voz     gera os vídeos sem narração
+
+NARRAÇÃO AUTOMÁTICA
+   - No começo do vídeo a voz fala a frase de gancho; no final, um chamado
+     ("Segue pra mais GTA 6", "Comenta aí..."). O som do jogo abaixa sozinho
+     enquanto a voz fala.
+   - Voz grátis da Microsoft (precisa de internet). Sem internet, usa a voz
+     "Maria" do Windows (mais robótica) e avisa na tela.
+   - No modo manual, a 5ª coluna do cortes.csv é o que a voz fala no começo
+     (se vazio, fala o texto do gancho).
+
+MODO CURIOSIDADE  (python fabrica.py --curiosidade)
+   - A voz conta uma curiosidade de GTA por cima dos momentos mais agitados
+     do gameplay, com legenda branca acompanhando a fala.
+   - As curiosidades ficam no config.json ("curiosidades"): gancho (1ª frase
+     falada), texto_tela (frase grande no topo) e texto (o resto da fala).
+     Mantenha ~20s de fala (umas 60 palavras no total).
+   - Cada curiosidade é usada uma vez só; a lista do que já saiu fica em
+     saida\.curiosidades_usadas.txt. Quando acabar, escreva novas no config.
+   - CONFIRA SE O FATO É VERDADE antes de postar. Errar curiosidade dá
+     comentário negativo e derruba o vídeo.
+
+LEGENDA DAS FALAS DO JOGO
+   - O que os personagens falam vira legenda amarela embaixo da imagem,
+     já traduzida pro português (o GTA fala em inglês).
+   - Usa o whisper.cpp (roda no seu PC, grátis). Na 1ª vez ele baixa uns
+     500 MB pra pasta whisper\ (ou rode antes: python fabrica.py --instalar-legenda).
+   - Sem internet na 1ª vez, os vídeos saem sem legenda e ele avisa.
+   python fabrica.py --sem-legenda   gera sem legenda
+
+AJUSTES (config.json)
+   seu_arroba               seu @ que aparece embaixo do vídeo
+   max_cortes_por_video     quantos cortes tirar de cada gravação
+   segundos_antes/depois    tamanho de cada corte (padrão ~24s)
+   sensibilidade_minima_db  menor = pega mais momentos (e mais "lixo")
+   ganchos / titulos        frases do topo do vídeo e dos títulos
+   hashtags                 hashtags da legenda
+   narracao.ativar          true/false liga ou desliga a voz
+   narracao.voz             pt-BR-AntonioNeural (homem) ou pt-BR-FranciscaNeural (mulher)
+   narracao.velocidade      "+12%" = mais rápido; "-5%" = mais devagar
+   narracao.volume_do_jogo_na_fala   0.3 = jogo cai pra 30% enquanto a voz fala
+   narracao.falas_fim       frases sorteadas pro final do vídeo
+   legenda.ativar           true/false liga ou desliga a legenda
+   legenda.modelo           "small" (bom) / "base" (mais rápido, erra mais) / "medium" (melhor, lento)
+   legenda.traduzir_para    "pt" traduz; "" deixa no idioma original
+   legenda.tamanho_fonte    tamanho da letra da legenda

@@ -1,0 +1,10 @@
+# baixado sozinho na 1ª execução (~500 MB, grande demais pro GitHub)
+whisper/
+# arquivos temporários
+.tmp/
+__pycache__/
+# suas gravações e os vídeos gerados (pesados)
+entrada/*
+saida/*
+!entrada/.gitkeep
+!saida/.gitkeep
