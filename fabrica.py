@@ -735,7 +735,15 @@ def twitch_conectar():
                                     timeout=20) as r:
             token = json.loads(r.read().decode("utf-8"))["access_token"]
     except urllib.error.HTTPError as e:
-        print(f"A Twitch recusou o login ({e.code}). Confira o Client ID e o Secret.")
+        corpo = e.read().decode("utf-8", errors="ignore")
+        if "Web Filter" in corpo or corpo.lstrip().startswith("<"):
+            print("A rede bloqueou a Twitch (filtro de internet, comum em rede de empresa). "
+                  "Suas chaves podem estar certas: rode num PC/rede pessoal.")
+        else:
+            print(f"A Twitch recusou o login ({e.code}). Confira o Client ID e o Secret.")
+        return None
+    except urllib.error.URLError as e:
+        print(f"Sem conexão com a Twitch: {e.reason}")
         return None
     return {"Client-Id": cid, "Authorization": f"Bearer {token}"}
 
@@ -1027,119 +1035,10 @@ def listar_videos() -> list:
     return out
 
 
-def modo_painel(porta: int = 8765):
-    import http.server
-    import webbrowser
-    pastas = {"pendente": SAIDA, "aprovado": APROVADOS, "recusado": RECUSADOS}
-
-    class Painel(http.server.BaseHTTPRequestHandler):
-        def log_message(self, *a):
-            pass
-
-        def _json(self, dados, codigo=200):
-            corpo = json.dumps(dados, ensure_ascii=False).encode("utf-8")
-            self.send_response(codigo)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(corpo)))
-            self.end_headers()
-            self.wfile.write(corpo)
-
-        def do_GET(self):
-            caminho = urllib.parse.unquote(self.path.split("?")[0])
-            if caminho in ("/", "/index.html"):
-                corpo = (BASE / "painel.html").read_bytes()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(corpo)))
-                self.end_headers()
-                self.wfile.write(corpo)
-            elif caminho == "/logo.png":
-                logo = sorted((BASE / "perfil").glob("perfil_tresestrelas*.png")) or \
-                    sorted((BASE / "perfil").glob("*.png"))
-                if not logo:
-                    return self._json({"erro": "sem logo"}, 404)
-                corpo = logo[0].read_bytes()
-                self.send_response(200)
-                self.send_header("Content-Type", "image/png")
-                self.send_header("Content-Length", str(len(corpo)))
-                self.send_header("Cache-Control", "max-age=3600")
-                self.end_headers()
-                self.wfile.write(corpo)
-            elif caminho == "/api/videos":
-                cfg = carregar_config()
-                self._json({"videos": listar_videos(), "arroba": cfg.get("seu_arroba", ""),
-                            "nome": cfg.get("nome_da_pagina", "")})
-            elif caminho.startswith("/video/"):
-                _, _, status, nome = caminho.split("/", 3)
-                arq = pastas.get(status, SAIDA) / Path(nome).name
-                if not arq.exists() or arq.suffix != ".mp4":
-                    return self._json({"erro": "não achei"}, 404)
-                self._enviar_video(arq)
-            else:
-                self._json({"erro": "não achei"}, 404)
-
-        def _enviar_video(self, arq: Path):
-            """Manda o vídeo aceitando Range (sem isso não dá pra avançar o vídeo no navegador)."""
-            tam = arq.stat().st_size
-            ini, fim = 0, tam - 1
-            faixa = re.match(r"bytes=(\d*)-(\d*)", self.headers.get("Range", ""))
-            if faixa:
-                if faixa.group(1):
-                    ini = int(faixa.group(1))
-                    fim = int(faixa.group(2)) if faixa.group(2) else tam - 1
-                elif faixa.group(2):
-                    ini = tam - int(faixa.group(2))
-                self.send_response(206)
-                self.send_header("Content-Range", f"bytes {ini}-{fim}/{tam}")
-            else:
-                self.send_response(200)
-            self.send_header("Content-Type", "video/mp4")
-            self.send_header("Accept-Ranges", "bytes")
-            self.send_header("Content-Length", str(fim - ini + 1))
-            self.end_headers()
-            try:
-                with open(arq, "rb") as f:
-                    f.seek(ini)
-                    falta = fim - ini + 1
-                    while falta > 0 and (bloco := f.read(min(1 << 20, falta))):
-                        self.wfile.write(bloco)
-                        falta -= len(bloco)
-            except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
-                pass  # o navegador cancelou (normal quando você pula o vídeo)
-
-        def do_POST(self):
-            dados = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-            nome = Path(dados.get("nome", "")).name
-            if self.path == "/api/status":
-                destino = {"aprovado": APROVADOS, "recusado": RECUSADOS,
-                           "pendente": SAIDA}.get(dados.get("status"))
-                ok = bool(destino and nome and mover_video(nome, destino))
-                return self._json({"ok": ok})
-            if self.path == "/api/rede":
-                rede, st = dados.get("rede"), dados.get("estado")
-                if rede not in REDES or st not in ("a_postar", "agendado", "postado", "pular"):
-                    return self._json({"ok": False}, 400)
-                estado = (json.loads(ESTADO_REDES.read_text(encoding="utf-8"))
-                          if ESTADO_REDES.exists() else {})
-                v = estado.setdefault(Path(nome).stem, {})
-                v[rede] = st
-                if st == "postado":
-                    v[f"_t_{rede}"] = time.time()  # pros gráficos
-                else:
-                    v.pop(f"_t_{rede}", None)
-                ESTADO_REDES.write_text(json.dumps(estado, indent=1), encoding="utf-8")
-                return self._json({"ok": True})
-            self._json({"erro": "não achei"}, 404)
-
-    SAIDA.mkdir(exist_ok=True)
-    servidor = http.server.ThreadingHTTPServer(("127.0.0.1", porta), Painel)
-    url = f"http://localhost:{porta}"
-    print(f"Painel aberto em {url}  (deixe esta janela aberta; Ctrl+C pra fechar)")
-    webbrowser.open(url)
-    try:
-        servidor.serve_forever()
-    except KeyboardInterrupt:
-        print("\nPainel fechado.")
+def modo_painel():
+    """O painel fica em painel.py (servidor) + pasta painel/ (a página)."""
+    import painel
+    painel.iniciar(sys.modules[__name__])
 
 
 def modo_twitch(cfg, so_listar=False):

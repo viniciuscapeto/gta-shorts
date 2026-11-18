@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel da Fábrica</title>
+<link rel="icon" href="/logo.png">
+<link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+<header class="topo">
+  <div class="marca">
+    <img src="/logo.png" alt="" width="42" height="42" onerror="this.style.display='none'">
+    <div><h1 id="marca">Três Estrelas</h1><p id="arroba">Fábrica de shorts</p></div>
+  </div>
+  <div class="pilulas">
+    <span class="pilula" id="p-twitch">Twitch</span>
+    <span class="pilula" id="p-telegram">Telegram</span>
+    <span class="pilula" id="p-fabrica">Fábrica</span>
+  </div>
+</header>
+
+<nav class="abas" id="abas">
+  <button class="aba ativa" data-aba="inicio">Início</button>
+  <button class="aba" data-aba="aprovar">Aprovar <span class="n" id="n-aprovar">0</span></button>
+  <button class="aba" data-aba="youtube">YouTube <span class="n" id="n-youtube">0</span></button>
+  <button class="aba" data-aba="tiktok">TikTok <span class="n" id="n-tiktok">0</span></button>
+  <button class="aba" data-aba="instagram">Instagram <span class="n" id="n-instagram">0</span></button>
+  <button class="aba" data-aba="facebook">Facebook <span class="n" id="n-facebook">0</span></button>
+  <button class="aba" data-aba="numeros">Números</button>
+  <button class="aba" data-aba="recusados">Recusados</button>
+  <button class="aba" data-aba="config">Configurações</button>
+  <button class="aba" data-aba="registro">Registro</button>
+</nav>
+
+<div class="ocupado" id="ocupado" hidden><span class="giro"></span><span id="ocupado-txt"></span></div>
+
+<main>
+  <!-- ======================= INÍCIO ======================= -->
+  <section class="painel ativo" id="inicio">
+    <div class="hero card" id="hero">
+      <div>
+        <h2 id="hero-titulo">Vamos colocar a fábrica pra trabalhar</h2>
+        <p class="suave" id="hero-sub">Ela busca os clipes de GTA mais vistos da Twitch, edita e deixa pra você aprovar.</p>
+      </div>
+      <div class="linha">
+        <button class="btn fantasma" data-tarefa="listar">Só ver quais pegaria</button>
+        <button class="btn grande" data-tarefa="buscar" id="btn-buscar">Buscar clipes virais agora</button>
+      </div>
+    </div>
+
+    <div class="numeros">
+      <div class="card numero clicavel" data-ir="aprovar"><span id="k-aprovar">0</span><small>esperando aprovação</small></div>
+      <div class="card numero"><span id="k-aprovados">0</span><small>aprovados</small></div>
+      <div class="card numero"><span id="k-postagens">0</span><small>postagens feitas</small></div>
+      <div class="card numero"><span id="k-fila">0</span><small>postagens pendentes</small></div>
+    </div>
+
+    <div class="grade2">
+      <div class="card">
+        <h3>Passo a passo</h3>
+        <ol class="passos">
+          <li id="passo-twitch">
+            <div class="passo-cab"><b>1. Chaves da Twitch</b><span class="ok-ico"></span></div>
+            <p class="suave">Ficam em <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">dev.twitch.tv → seu app → Gerenciar</a>. É com elas que a fábrica acha os clipes mais vistos.</p>
+            <div class="duplo">
+              <input id="s-twitch-id" placeholder="ID do cliente" autocomplete="off">
+              <input id="s-twitch-secret" placeholder="Segredo do cliente" type="password" autocomplete="off">
+            </div>
+            <div class="linha"><button class="btn" id="btn-twitch">Salvar e testar</button>
+              <span class="suave" id="twitch-info"></span></div>
+          </li>
+          <li id="passo-telegram">
+            <div class="passo-cab"><b>2. Aprovar pelo celular (opcional)</b><span class="ok-ico"></span></div>
+            <p class="suave">No Telegram, fale com o <b>@BotFather</b>, mande <code>/newbot</code>, cole o token aqui e mande <code>/start</code> pro seu bot. Os vídeos chegam no celular com os botões Aprovar e Recusar.</p>
+            <div class="linha">
+              <input id="s-telegram" placeholder="Token do bot (123456:ABC...)" type="password" autocomplete="off">
+              <button class="btn" id="btn-telegram">Salvar e testar</button>
+            </div>
+            <span class="suave" id="telegram-info"></span>
+          </li>
+          <li id="passo-streamers">
+            <div class="passo-cab"><b>3. Streamers que liberaram corte</b><span class="ok-ico"></span></div>
+            <p class="suave" id="streamers-info">Marque em Configurações quem te autorizou. Os outros chegam com um aviso pra você decidir.</p>
+            <button class="btn fantasma peq" data-ir="config">Abrir Configurações</button>
+          </li>
+          <li id="passo-buscar">
+            <div class="passo-cab"><b>4. Buscar e aprovar</b><span class="ok-ico"></span></div>
+            <p class="suave">Clique em <b>Buscar clipes virais agora</b>. Os vídeos prontos aparecem na aba <b>Aprovar</b>.</p>
+          </li>
+        </ol>
+      </div>
+
+      <div class="coluna">
+        <div class="card">
+          <h3>Outras ferramentas</h3>
+          <div class="ferramentas">
+            <button class="btn fantasma" data-tarefa="gravacoes">Cortar minhas gravações <small id="n-gravacoes"></small></button>
+            <button class="btn fantasma" data-tarefa="curiosidades">Gerar vídeos de curiosidade</button>
+            <button class="btn fantasma" id="btn-pasta">Abrir pasta dos vídeos</button>
+          </div>
+          <p class="suave">"Cortar minhas gravações" usa os vídeos que você colocar na pasta <code>entrada</code>.</p>
+        </div>
+        <div class="card">
+          <div class="cab-card"><h3>Acontecendo agora</h3><button class="btn fantasma peq" data-ir="registro">Ver tudo</button></div>
+          <pre class="log curto" id="log-curto"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= APROVAR / REDES / RECUSADOS ======================= -->
+  <section class="painel" id="aprovar">
+    <div class="barra card">
+      <span><b>Vídeos esperando você.</b> <span class="suave">Edite o título e a legenda se quiser, depois aprove ou recuse.</span></span>
+      <span class="espaco"></span>
+      <button class="btn fantasma peq" data-tarefa="buscar">Buscar mais</button>
+    </div>
+    <div class="videos" id="lista-aprovar"></div>
+  </section>
+
+  <section class="painel" id="rede">
+    <div class="barra card" id="barra-rede"></div>
+    <div class="videos" id="lista-rede"></div>
+  </section>
+
+  <section class="painel" id="recusados">
+    <div class="videos" id="lista-recusados"></div>
+  </section>
+
+  <!-- ======================= NÚMEROS ======================= -->
+  <section class="painel" id="numeros">
+    <div class="kpis" id="kpis"></div>
+    <div class="card bloco">
+      <h3>Andamento por rede</h3>
+      <p class="suave" id="sub-redes"></p>
+      <div class="legenda" id="leg-redes"></div>
+      <div id="g-redes"></div>
+      <details class="tabela"><summary>Ver em tabela</summary><div id="t-redes"></div></details>
+    </div>
+    <div class="grade2" style="margin-top:16px">
+      <div class="card bloco">
+        <h3>Últimos 14 dias</h3>
+        <p class="suave">Vídeos gerados pela fábrica e postagens feitas, por dia</p>
+        <div class="legenda"><span><i class="linha-k" style="background:var(--s-gerados)"></i>Vídeos gerados</span>
+          <span><i class="linha-k" style="background:var(--s-postado)"></i>Postagens</span></div>
+        <div class="grafico" id="g-dias"></div>
+        <details class="tabela"><summary>Ver em tabela</summary><div id="t-dias"></div></details>
+      </div>
+      <div class="card bloco">
+        <h3>Streamers com mais vídeos</h3>
+        <p class="suave">Clipes aprovados ou na fila, por streamer</p>
+        <div id="g-streamers"></div>
+        <details class="tabela"><summary>Ver em tabela</summary><div id="t-streamers"></div></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= CONFIG ======================= -->
+  <section class="painel" id="config">
+    <form id="form-config" class="grade2">
+      <div class="card">
+        <h3>Página</h3>
+        <div class="duplo">
+          <label>Nome da página<input name="nome_da_pagina"></label>
+          <label>@ que aparece nos vídeos<input name="seu_arroba"></label>
+        </div>
+        <label class="check"><input type="checkbox" name="narracao.ativar"> narração automática (voz no começo e no fim)</label>
+        <label class="check"><input type="checkbox" name="legenda.ativar"> legenda do que o streamer fala</label>
+        <label class="check"><input type="checkbox" name="twitch.usar_titulo_do_clipe"> usar o título do clipe como texto do topo</label>
+        <label>Hashtags (separadas por espaço)<input name="twitch.hashtags"></label>
+
+        <h3 style="margin-top:18px">Clipes virais da Twitch inteira</h3>
+        <label class="check"><input type="checkbox" name="twitch.descobrir.ativar"> procurar os mais vistos de GTA em português</label>
+        <div class="duplo">
+          <label>Dos últimos (dias)<input type="number" name="twitch.descobrir.dias" min="1" max="60"></label>
+          <label>Mínimo de views<input type="number" name="twitch.descobrir.min_visualizacoes" min="0"></label>
+        </div>
+        <div class="duplo">
+          <label>Clipes por busca<input type="number" name="twitch.descobrir.max_clipes" min="1" max="50"></label>
+          <label>Máximo por streamer<input type="number" name="twitch.descobrir.max_por_streamer" min="1" max="10"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cab-card"><h3>Streamers da sua lista</h3><button type="button" class="btn fantasma peq" id="btn-add-streamer">+ Adicionar</button></div>
+        <p class="suave">Marque <b>liberou</b> só pra quem te autorizou (guarde o print). Esses entram sempre, além dos virais.</p>
+        <div id="streamers"></div>
+        <div class="duplo" style="margin-top:12px">
+          <label>Dos últimos (dias)<input type="number" name="twitch.dias" min="1" max="60"></label>
+          <label>Clipes por streamer<input type="number" name="twitch.clipes_por_streamer" min="1" max="10"></label>
+        </div>
+        <label>Mínimo de views<input type="number" name="twitch.min_visualizacoes" min="0"></label>
+        <label>Nunca pegar destes canais (separados por vírgula)<input name="twitch.nunca_pegar"></label>
+      </div>
+
+      <div class="largo direita"><button class="btn grande" type="submit">Salvar configurações</button></div>
+    </form>
+  </section>
+
+  <!-- ======================= REGISTRO ======================= -->
+  <section class="painel" id="registro">
+    <div class="card"><pre id="log" class="log"></pre></div>
+  </section>
+</main>
+
+<div id="tip"></div>
+<div id="aviso" class="aviso" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

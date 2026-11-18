@@ -53,6 +53,19 @@ LEGENDA DAS FALAS DO JOGO
    - Sem internet na 1ª vez, os vídeos saem sem legenda e ele avisa.
    python fabrica.py --sem-legenda   gera sem legenda
 
+PAINEL  (dois cliques em painel.bat)
+   - Abre no navegador e dá pra fazer TUDO por ele, sem terminal:
+       Início          passo a passo, botão "Buscar clipes virais agora" e números
+       Aprovar         assiste o vídeo, edita título e legenda, aprova ou recusa
+       YouTube/TikTok/Instagram/Facebook   o que falta postar em cada rede, com
+                       botões de copiar título/legenda, baixar e marcar "Postado"
+       Números         gráficos de postagens por rede, por dia e por streamer
+       Configurações   streamers liberados, mínimo de views, dias, @ e hashtags
+       Registro        tudo o que a fábrica está fazendo
+   - Deixe a janela preta aberta enquanto usa o painel.
+   - Com o bot do Telegram configurado, o painel também recebe as aprovações
+     feitas pelo celular.
+
 CLIPES DA TWITCH  (rodar_twitch.bat  ou  python fabrica.py --twitch)
    - Pega os clipes de GTA mais vistos dos últimos dias dos streamers que
      estão em config.json > twitch > streamers com "autorizado": true.
