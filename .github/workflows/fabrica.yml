@@ -5,7 +5,7 @@ name: Fábrica na nuvem
 
 on:
   schedule:
-    - cron: "17 * * * *"   # de hora em hora (pega os clipes das lives enquanto estão rolando)
+    - cron: "*/25 * * * *"   # a cada ~25 min (:00, :25, :50) pra pegar os clipes das lives ainda quentes
   workflow_dispatch:
     inputs:
       fonte:
