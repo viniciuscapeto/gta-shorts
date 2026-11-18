@@ -1224,8 +1224,11 @@ def modo_postar_instagram():
         print(f"Instagram: último post há {int((time.time() - ultimo) / 60)} min, esperando o intervalo.")
         return
     feitos = set(IG_POSTADOS.read_text(encoding="utf-8").split()) if IG_POSTADOS.exists() else set()
-    fila = sorted((p for p in APROVADOS.glob("*.mp4") if p.name not in feitos),
-                  key=lambda p: p.stat().st_mtime) if APROVADOS.exists() else []
+    # 1º a fila guardada no repositório (fila_instagram/, na ordem do nome), depois os aprovados
+    salva = sorted(p for p in (BASE / "fila_instagram").glob("*.mp4") if p.name not in feitos)
+    novos = sorted((p for p in APROVADOS.glob("*.mp4") if p.name not in feitos),
+                   key=lambda p: p.stat().st_mtime) if APROVADOS.exists() else []
+    fila = salva + novos
     print(f"Instagram: {len(fila)} na fila")
     if not fila:
         return
@@ -1242,8 +1245,9 @@ def modo_postar_instagram():
     with open(IG_POSTADOS, "a", encoding="utf-8") as f:
         f.write(video.name + "\n")
     IG_ULTIMO.write_text(str(time.time()))
-    for ext in (".mp4", ".txt", ".json"):
-        video.with_suffix(ext).unlink(missing_ok=True)  # libera espaço na nuvem
+    if video.parent == APROVADOS:  # os da fila_instagram/ ficam no repositório
+        for ext in (".mp4", ".txt", ".json"):
+            video.with_suffix(ext).unlink(missing_ok=True)  # libera espaço na nuvem
     print(f"   📸 postado no Instagram: {link}")
     if tg:
         _tg(tg[0], "sendMessage", {"chat_id": tg[1], "disable_notification": True,

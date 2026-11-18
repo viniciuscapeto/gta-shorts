@@ -1,5 +1,39 @@
-FÁBRICA DE SHORTS - GTA 6
+FÁBRICA DE SHORTS - GTA 6  (página Três Estrelas, @tresestrelasclips)
 =========================
+
+COMO ESTÁ FUNCIONANDO HOJE (não precisa de PC ligado)
+   - A NUVEM (GitHub Actions, "Fábrica na nuvem") roda sozinha a cada ~25 min:
+     pega os clipes das lives BR de GTA 6 na Twitch (com legenda) e manda
+     cada um pro Telegram (@tresestrelas_aprova_bot) com Aprovar/Recusar.
+   - Você aprova no celular. Pra postar: segura no vídeo > Salvar na galeria,
+     posta no Instagram/TikTok e cola a "Legenda pronta" que vem embaixo.
+   - fila_instagram\  = vídeos já aprovados e conferidos esperando postagem
+     (ver fila_instagram\LEIA.txt).
+
+USAR EM CASA (PC pessoal)
+   1. Instale o Python (python.org) marcando "Add Python to PATH".
+   2. Baixe o projeto: github.com/viniciuscapeto/gta-shorts > Code > Download ZIP
+      (ou: git clone https://github.com/viniciuscapeto/gta-shorts.git)
+   3. Dois cliques em  painel.bat  (instala o que falta e abre o painel).
+   4. Na aba Início do painel, cole as chaves (ficam só no seu PC, em segredos.json):
+        - Twitch: ID do cliente (dev.twitch.tv/console/apps > Gerenciar).
+          O segredo NÃO dá pra ver de novo: clique em "Novo segredo" e, se fizer
+          isso, atualize também o TWITCH_CLIENT_SECRET nos segredos do GitHub.
+        - Telegram: no @BotFather mande /mybots > o bot > API Token.
+   5. Com o painel aberto, os vídeos que você aprovar no Telegram são baixados
+      pra saida\aprovados e aparecem nas abas das redes (copiar legenda, baixar).
+
+POSTAGEM AUTOMÁTICA NO INSTAGRAM (falta terminar)
+   - Falta só o token: developers.facebook.com > seu app > Casos de uso >
+     Instagram > API setup > Generate token (conta @tresestrelasclips) e salvar
+     no GitHub em Settings > Secrets > Actions como INSTAGRAM_TOKEN.
+     (O Facebook novo pediu pra confirmar o celular em
+      accountscenter.facebook.com/personal_info/contact_points ; ou use o pessoal.)
+   - Com o token salvo, a nuvem posta sozinha 1 Reel por rodada: primeiro a
+     fila_instagram\, depois o que você aprovar. Nesse caso coloque
+     "postar_pela_nuvem": true no config.json (bloco "instagram") pra o painel
+     do PC não disputar as aprovações do Telegram com a nuvem.
+   - O token vale 60 dias.
 
 1) GRAVAR NO PS5
    - Configurações > Capturas e transmissões > Capturas:

@@ -1,0 +1,17 @@
+FILA DO INSTAGRAM (já conferidos: são GTA 6, com legenda pronta)
+=================================================================
+Poste na ordem do número (01, 02, ...). Cada vídeo tem um .txt com a
+legenda pronta: abra, copie tudo que está abaixo de "LEGENDA" e cole no post.
+
+01_nuvem_107  -> CONFIRA NO PERFIL ANTES: o upload dele travou no PC do
+                 trabalho; se o "PÉ GRANDE NO GTA 6?!" já estiver no
+                 @tresestrelasclips, pule esse.
+02 a 06       -> ainda não postados.
+
+Já postados (não repetir): Ele tá jogando oficial, Primeiro roubo,
+Gordo quase infartou, Babando, KKKKKKKKK (Snopey), Lucia é mãe,
+Que isso Mandy?
+
+Quando o INSTAGRAM_TOKEN estiver nos segredos do GitHub, a nuvem posta
+esta fila sozinha (1 por rodada) antes dos aprovados novos. Se você postar
+algum na mão antes disso, apague o arquivo daqui pra nuvem não repetir.
