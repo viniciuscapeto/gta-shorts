@@ -801,6 +801,15 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
     idiomas = tuple(i.lower() for i in desc.get("idiomas", ["pt"]))
 
     proibidos = [p.lower() for p in tw.get("bloquear_no_titulo", [])]
+    rp = [p.lower() for p in tw.get("bloquear_live_com", [])]
+
+    def live_ok(s):
+        """Live na categoria GTA 6 mas jogando RP de GTA 5 (título com 'RP', 'cidade'...)."""
+        t = f" {re.sub(r'[^\w]+', ' ', (s.get('title') or '').lower())} "
+        ruim = next((p for p in rp if f" {p} " in t or (len(p) > 4 and p in t)), None)
+        if ruim:
+            print(f"   (ignorando {s['user_name']}: título da live tem \"{ruim}\" -> provável GTA 5 RP)")
+        return not ruim
 
     def titulo_ok(c):
         t = f" {(c.get('title') or '').lower()} "
@@ -852,7 +861,8 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
             params = [("game_id", j) for j in ids_jogos] + [("first", 100)]
             params += [("language", i) for i in g.get("idiomas", [])]  # [] = qualquer idioma
             achadas = [s for s in _twitch_get("streams", params, cab)["data"]
-                       if s["viewer_count"] >= g.get("min_espectadores", 0) and s["user_id"] not in vistos]
+                       if s["viewer_count"] >= g.get("min_espectadores", 0) and s["user_id"] not in vistos
+                       and live_ok(s)]
             achadas.sort(key=lambda s: -s["viewer_count"])
             achadas = achadas[:g.get("max_lives", 10)]
             vistos |= {s["user_id"] for s in achadas}
@@ -880,6 +890,10 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
         usuarios = _twitch_get("users", [("login", l) for l in lista], cab)["data"]
         for l in lista - {u["login"] for u in usuarios}:
             print(f"   [não achei o canal twitch.tv/{l}; confira o login no config.json]")
+        # quem da lista está ao vivo jogando RP (título da live) fica de fora nesta rodada
+        no_ar = _twitch_get("streams", [("user_id", u["id"]) for u in usuarios[:100]], cab)["data"] if usuarios else []
+        em_rp = {s["user_id"] for s in no_ar if not live_ok(s)}
+        usuarios = [u for u in usuarios if u["id"] not in em_rp]
         for u in usuarios:
             quer = tw.get("clipes_por_streamer", 3)
             achados = _paginar_clipes([("broadcaster_id", u["id"])] + periodo(tw.get("dias", 7)),
