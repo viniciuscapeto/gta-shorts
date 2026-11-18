@@ -49,6 +49,9 @@ SAIDA = BASE / "saida"
 TMP = BASE / ".tmp"
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 EXTS = {".mp4", ".webm", ".mov", ".mkv"}
+# yt-dlp usando os certificados do Windows (os mesmos do Chrome): funciona também em
+# rede que inspeciona HTTPS com certificado próprio
+YTDLP = [sys.executable, "-m", "yt_dlp", "--compat-options", "no-certifi"]
 SR = 8000          # taxa de amostragem usada só para análise
 JANELA = 0.5       # segundos por bloco de análise
 
@@ -849,7 +852,7 @@ def baixar_clipe(clipe: dict):
     destino = CLIPES / (re.sub(r"[^\w-]", "_", clipe["id"]) + ".mp4")
     if destino.exists():
         return destino
-    r = subprocess.run([sys.executable, "-m", "yt_dlp", "-q", "--no-warnings",
+    r = subprocess.run([*YTDLP,"-q", "--no-warnings",
                         "-f", "best[ext=mp4]/best", "-o", str(destino), clipe["url"]],
                        capture_output=True, text=True, encoding="utf-8", errors="ignore")
     if r.returncode != 0 or not destino.exists():
@@ -1124,7 +1127,7 @@ FILTRO_YT = {1: "CAMSAggC", 7: "CAMSAggD", 30: "CAMSAggE"}
 
 
 def _ytdlp_json(args: list, timeout: int = 120):
-    r = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", *args],
+    r = subprocess.run([*YTDLP,"-J", "--no-warnings", *args],
                        capture_output=True, text=True, encoding="utf-8", errors="ignore",
                        timeout=timeout)
     if r.returncode != 0 or not r.stdout.strip():
@@ -1230,7 +1233,7 @@ def baixar_trecho(info: dict, ini: float, fim: float):
     if destino.exists():
         return destino
     # baixa só o pedaço (com uma folga de 2s de cada lado pra não cortar no meio da fala)
-    r = subprocess.run([sys.executable, "-m", "yt_dlp", "-q", "--no-warnings",
+    r = subprocess.run([*YTDLP,"-q", "--no-warnings",
                         "--ffmpeg-location", FFMPEG,
                         "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
                         "--merge-output-format", "mp4",
