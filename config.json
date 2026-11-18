@@ -63,17 +63,19 @@
     "descobrir": {
       "ativar": true,
       "idiomas": ["pt"],
-      "dias": 3,
-      "min_visualizacoes": 2000,
+      "dias": 7,
+      "min_visualizacoes": 300,
       "max_clipes": 10,
       "max_por_streamer": 2,
       "paginas": 5
     },
     "nunca_pegar": [],
     "jogos": ["Grand Theft Auto V", "Grand Theft Auto VI"],
+    "streamers_qualquer_jogo": true,
+    "so_autorizados": false,
     "dias": 14,
     "clipes_por_streamer": 3,
-    "min_visualizacoes": 1000,
+    "min_visualizacoes": 100,
     "min_segundos": 8,
     "usar_titulo_do_clipe": true,
     "recorte_laterais": 1.0,
@@ -82,10 +84,10 @@
     },
     "titulos": [
       "{gancho} 😂 | {streamer}",
-      "{gancho} | {streamer} no GTA",
-      "{streamer}: {gancho} #gta"
+      "{gancho} | {streamer}",
+      "{streamer}: {gancho} 😳"
     ],
-    "hashtags": ["#gta", "#gtarp", "#twitch", "#clips", "#fyp", "#viral", "#shorts"]
+    "hashtags": ["#twitch", "#clips", "#cortes", "#streamer", "#games", "#fyp", "#viral", "#foryou", "#shorts"]
   },
 
   "youtube": {

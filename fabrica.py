@@ -800,8 +800,8 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
                             ("ended_at", agora.strftime(fmt))]
     idiomas = tuple(i.lower() for i in desc.get("idiomas", ["pt"]))
 
-    def bom(c, minimo):
-        return (c["game_id"] in ids_jogos and c["id"] not in usados
+    def bom(c, minimo, qualquer_jogo=False):
+        return ((qualquer_jogo or c["game_id"] in ids_jogos) and c["id"] not in usados
                 and c["broadcaster_name"].lower() not in bloqueados
                 and c["view_count"] >= minimo
                 and c["duration"] >= tw.get("min_segundos", 8))
@@ -826,19 +826,26 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
             if len(escolhidos) >= desc.get("max_clipes", 10):
                 break
         print(f"   Virais de GTA ({'/'.join(idiomas)}): {len(escolhidos)} clipe(s) novo(s)")
-    # (2) os streamers da lista (só os autorizados)
-    if autorizados:
-        usuarios = _twitch_get("users", [("login", l) for l in autorizados], cab)["data"]
-        for l in autorizados - {u["login"] for u in usuarios}:
+    # (2) os streamers da lista: todos (os sem "liberou" chegam com aviso pra você decidir),
+    #     e de qualquer jogo se "streamers_qualquer_jogo" estiver ligado
+    lista = set(streamers) - bloqueados
+    if tw.get("so_autorizados", False):
+        lista &= autorizados
+    qualquer = tw.get("streamers_qualquer_jogo", True)
+    if lista:
+        usuarios = _twitch_get("users", [("login", l) for l in lista], cab)["data"]
+        for l in lista - {u["login"] for u in usuarios}:
             print(f"   [não achei o canal twitch.tv/{l}; confira o login no config.json]")
         for u in usuarios:
             quer = tw.get("clipes_por_streamer", 3)
             achados = _paginar_clipes([("broadcaster_id", u["id"])] + periodo(tw.get("dias", 7)),
-                                      cab, lambda c: bom(c, tw.get("min_visualizacoes", 0)), 5, quer)
+                                      cab, lambda c: bom(c, tw.get("min_visualizacoes", 0), qualquer),
+                                      5, quer)
             achados.sort(key=lambda c: -c["view_count"])
             for c in achados[:quer]:
                 escolhidos[c["id"]] = c
-            print(f"   {u['display_name']}: {len(achados)} clipe(s) novo(s) de GTA")
+            print(f"   {u['display_name']}: {len(achados)} clipe(s) novo(s)"
+                  f"{'' if qualquer else ' de GTA'}")
     # o clipe só traz o nome de exibição; o login (o do link twitch.tv/...) vem por id
     ids = list({c["broadcaster_id"] for c in escolhidos.values()})
     logins = {}

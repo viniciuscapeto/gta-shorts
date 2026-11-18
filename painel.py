@@ -27,6 +27,7 @@ EDITAVEIS = [
     "twitch.descobrir.max_clipes", "twitch.descobrir.max_por_streamer",
     "twitch.dias", "twitch.clipes_por_streamer", "twitch.min_visualizacoes",
     "twitch.streamers", "twitch.nunca_pegar", "twitch.hashtags", "twitch.usar_titulo_do_clipe",
+    "twitch.streamers_qualquer_jogo", "twitch.so_autorizados",
     "youtube.buscas", "youtube.canais", "youtube.nunca_pegar", "youtube.dias",
     "youtube.min_visualizacoes", "youtube.min_duracao_min", "youtube.max_videos",
     "youtube.cortes_por_video", "youtube.segundos_por_corte",

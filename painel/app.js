@@ -328,7 +328,8 @@ async function carregarConfig() {
     if (!el.name || !(el.name in cfgAtual)) continue;
     let v = cfgAtual[el.name];
     // sem valor no config.json: essas duas vêm ligadas por padrão (igual à fábrica)
-    if (el.type === "checkbox") el.checked = v == null ? ["twitch.descobrir.ativar", "twitch.usar_titulo_do_clipe"].includes(el.name) : !!v;
+    if (el.type === "checkbox") el.checked = v == null
+      ? ["twitch.descobrir.ativar", "twitch.usar_titulo_do_clipe", "twitch.streamers_qualquer_jogo"].includes(el.name) : !!v;
     else if (Array.isArray(v)) el.value = v.join(el.name === "twitch.hashtags" ? " " : ", ");
     else el.value = v ?? "";
   }
