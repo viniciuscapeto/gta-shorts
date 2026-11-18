@@ -547,9 +547,16 @@ def renderizar(video: Path, ini: float, fim: float, gancho: str, destino: Path, 
             legendas = transcrever(video, ini, dur, cfg)
         if legendas:
             escrever_ass(legendas, ass, cfg)
-    txt = TMP / "gancho.txt"
     linhas = textwrap.wrap(gancho.upper(), width=cfg["letras_por_linha"]) or [""]
-    txt.write_text("\n".join(linhas), encoding="utf-8", newline="\n")
+    # uma linha por drawtext (alguns ffmpeg desenham a quebra de linha como um "□")
+    textos_gancho = []
+    for i, linha in enumerate(linhas):
+        arq = TMP / f"gancho{i}.txt"
+        arq.write_text(linha, encoding="utf-8", newline="\n")
+        y = 440 - (len(linhas) - 1 - i) * 92  # a última linha termina perto de y=520
+        textos_gancho.append(
+            f"drawtext=fontfile='{esc(Path(cfg['fonte']))}':textfile='{esc(arq)}':"
+            f"fontsize=78:fontcolor=white:borderw=7:bordercolor=black:x=(w-text_w)/2:y={y}")
     perfil = TMP / "perfil.txt"
     perfil.write_text(cfg.get("seu_arroba", ""), encoding="utf-8", newline="\n")
     fonte = esc(Path(cfg["fonte"]))
@@ -568,9 +575,7 @@ def renderizar(video: Path, ini: float, fim: float, gancho: str, destino: Path, 
         "boxblur=25:2,eq=brightness=-0.18[fundo];"
         f"[b]crop=iw*{zoom}:ih,scale=1080:-2[jogo];"
         "[fundo][jogo]overlay=(W-w)/2:(H-h)/2[v0];"
-        f"[v0]drawtext=fontfile='{fonte}':textfile='{esc(txt)}':text_align=C:"
-        "fontsize=78:fontcolor=white:borderw=7:bordercolor=black:line_spacing=12:"
-        "x=(w-text_w)/2:y=520-text_h[v1];"
+        f"[v0]{','.join(textos_gancho)}[v1];"
         f"[v1]{texto_credito}drawtext=fontfile='{fonte}':textfile='{esc(perfil)}':"
         "fontsize=44:fontcolor=white@0.85:borderw=4:bordercolor=black:"
         "x=(w-text_w)/2:y=h-360,fps=fps='min(source_fps,60)'"
