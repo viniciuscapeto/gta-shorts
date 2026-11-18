@@ -93,6 +93,23 @@
     "canais": [
       {"canal": "@PaulinhoLOKOoficial", "autorizado": false, "como_autorizou": "remove se pedir (política do site)"}
     ],
+    "fila": [
+      "https://www.youtube.com/watch?v=U9BJ03LHTNw",
+      "https://www.youtube.com/watch?v=abL_AdXG2Zo",
+      "https://www.youtube.com/watch?v=XwR7ExYEvu0",
+      "https://www.youtube.com/watch?v=rBp3sxZb1LA",
+      "https://www.youtube.com/watch?v=B31-3cvyYSU",
+      "https://www.youtube.com/watch?v=khompQhMnnY",
+      "https://www.youtube.com/watch?v=8IDkSe3nLrU",
+      "https://www.youtube.com/watch?v=tZcx7OUCfxg",
+      "https://www.youtube.com/watch?v=H9xQlLT_hPQ",
+      "https://www.youtube.com/watch?v=1UVfyiLLDP0",
+      "https://www.youtube.com/watch?v=dL4V-5iSFeY",
+      "https://www.youtube.com/watch?v=8Zul79Ml1nQ",
+      "https://www.youtube.com/watch?v=qDwXBEes9Og",
+      "https://www.youtube.com/watch?v=xxTKEsYhnn4",
+      "https://www.youtube.com/watch?v=TD_YbyLhuhI"
+    ],
     "nunca_pegar": [],
     "dias": 7,
     "min_visualizacoes": 30000,

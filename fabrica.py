@@ -1164,6 +1164,13 @@ def buscar_youtube(cfg: dict) -> list:
     canais = {c["canal"].strip().lower(): c for c in yt.get("canais", []) if c.get("canal")}
     bloqueados = {c.strip().lower() for c in yt.get("nunca_pegar", [])}
     candidatos = {}
+    # fila: links salvos à mão (entram primeiro, sem filtro de data nem de views)
+    for link in yt.get("fila", []):
+        m = re.search(r"(?:v=|youtu\.be/|shorts/|live/)([\w-]{11})", link)
+        if m:
+            candidatos[m.group(1)] = "fila"
+    if candidatos:
+        print(f"   fila: {len(candidatos)} vídeo(s) salvos")
     for q in yt.get("buscas", []):
         url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(q)}&sp={filtro}"
         d, erro = _ytdlp_json(["--flat-playlist", "--playlist-end", "15", url])
@@ -1205,7 +1212,7 @@ def buscar_youtube(cfg: dict) -> list:
         idioma = (info.get("language") or "").lower()
         if idioma and not idioma.startswith("pt"):
             continue
-        if (info.get("upload_date") or "99999999") < limite:
+        if origem != "fila" and (info.get("upload_date") or "99999999") < limite:
             continue
         if (info.get("duration") or 0) < yt.get("min_duracao_min", 20) * 60:
             continue  # curto demais: normalmente já é um corte de outro canal
@@ -1216,15 +1223,18 @@ def buscar_youtube(cfg: dict) -> list:
                   if f"{vid}@{int(m[0]) // 30}" not in usados]
         if not cortes:
             continue
-        if por_canal.get(handle, 0) >= yt.get("max_por_canal", 2):
+        if origem != "fila" and por_canal.get(handle, 0) >= yt.get("max_por_canal", 2):
             continue
         por_canal[handle] = por_canal.get(handle, 0) + 1
         conf = canais.get(handle) or canais.get((info.get("channel") or "").lower()) or {}
         info["_autorizado"] = bool(conf.get("autorizado"))
         info["_cortes"] = cortes
+        info["_fila"] = origem == "fila"
         escolhidos.append(info)
-    escolhidos.sort(key=lambda i: -(i.get("view_count") or 0))
-    return escolhidos[:yt.get("max_videos", 6)]
+    # os da fila vêm primeiro e não contam no limite; depois os mais vistos da busca
+    fila = sorted([i for i in escolhidos if i["_fila"]], key=lambda i: -(i.get("view_count") or 0))
+    resto = sorted([i for i in escolhidos if not i["_fila"]], key=lambda i: -(i.get("view_count") or 0))
+    return fila + resto[:yt.get("max_videos", 6)]
 
 
 def baixar_trecho(info: dict, ini: float, fim: float):
