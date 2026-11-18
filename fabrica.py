@@ -1275,37 +1275,52 @@ def modo_twitch(cfg, so_listar=False):
     base.setdefault("narracao", {}).update(tw.get("narracao", {}))
     base["hashtags"] = tw.get("hashtags", cfg["hashtags"])
     tg = telegram_conectar(avisar=False) if not so_listar else None
+    if not so_listar and not tg:
+        print("   [Telegram NÃO conectado: os vídeos vão ficar só na pasta/artifacts]")
+    # limite por rodada (a nuvem tem 60 min; com legenda cada clipe leva ~1-2 min)
+    maximo = tw.get("max_por_rodada", 15)
+    if len(clipes) > maximo:
+        print(f"   {len(clipes)} clipes achados; editando os {maximo} primeiros (o resto fica pra próxima)")
+        clipes = clipes[:maximo]
     for c in clipes:
-        nome, login = c["broadcaster_name"], c["_login"]
-        selo = "" if c["_autorizado"] else "  [sem autorização confirmada]"
-        print(f"\n>> {nome} | {c['view_count']} views | {c['duration']:.0f}s | \"{c['title']}\"{selo}")
-        print(f"   {c['url']}")
-        if so_listar:
-            continue
-        video = baixar_clipe(c)
-        if not video:
-            continue
-        gancho = limpar_titulo(c["title"]) if tw.get("usar_titulo_do_clipe", True) else ""
-        if len(gancho.replace(" ", "")) < 8:
-            gancho = ""  # título tipo "b" ou "kkk": usa um dos ganchos prontos do config
-        cfg_c = dict(base)
-        cfg_c["titulos"] = [t.replace("{streamer}", nome) for t in tw.get("titulos", cfg["titulos"])]
-        cfg_c["hashtags"] = base["hashtags"] + [f"#{re.sub(r'\W', '', login)}"]
-        finalizar_corte(
-            cfg_c, video, 0.0, float(c["duration"]), gancho,
-            SAIDA / f"twitch_{re.sub(r'\W', '', login)}_{re.sub(r'[^\w-]', '_', c['id'])}.mp4",
-            credito=f"CLIPE: twitch.tv/{login}",
-            creditos=(f"🎥 Créditos: {nome} - https://twitch.tv/{login}\n"
-                      f"Clipe original: {c['url']}\nClipado por: {c['creator_name']}"),
-            info={"plataforma": "twitch", "streamer": nome, "login": login,
-                  "canal_url": f"https://twitch.tv/{login}", "views": c["view_count"],
-                  "url": c["url"], "titulo_original": c["title"], "autorizado": c["_autorizado"],
-                  "clipe_criado_em": c.get("created_at", "")},
-            usados=(USADOS_TWITCH, c["id"]), tg=tg,
-            legenda_tg=f"🎬 {nome} | 👁 {c['view_count']} views | {c['duration']:.0f}s\n"
-                       f"\"{c['title']}\"\n{c['url']}")
+        try:
+            _processar_clipe_twitch(c, cfg, tw, base, tg, so_listar)
+        except Exception as e:  # noqa: BLE001 - um clipe com problema não para a rodada
+            print(f"   [erro nesse clipe: {type(e).__name__}: {str(e)[:200]}]")
     if tg:
         print("\nVídeos enviados pro Telegram pra você aprovar.")
+
+
+def _processar_clipe_twitch(c, cfg, tw, base, tg, so_listar):
+    """Baixa, edita e manda pro Telegram um clipe da Twitch."""
+    nome, login = c["broadcaster_name"], c["_login"]
+    selo = "" if c["_autorizado"] else "  [sem autorização confirmada]"
+    print(f"\n>> {nome} | {c['view_count']} views | {c['duration']:.0f}s | \"{c['title']}\"{selo}")
+    print(f"   {c['url']}")
+    if so_listar:
+        return
+    video = baixar_clipe(c)
+    if not video:
+        return
+    gancho = limpar_titulo(c["title"]) if tw.get("usar_titulo_do_clipe", True) else ""
+    if len(gancho.replace(" ", "")) < 8:
+        gancho = ""  # título tipo "b" ou "kkk": usa um dos ganchos prontos do config
+    cfg_c = dict(base)
+    cfg_c["titulos"] = [t.replace("{streamer}", nome) for t in tw.get("titulos", cfg["titulos"])]
+    cfg_c["hashtags"] = base["hashtags"] + [f"#{re.sub(r'\W', '', login)}"]
+    finalizar_corte(
+        cfg_c, video, 0.0, float(c["duration"]), gancho,
+        SAIDA / f"twitch_{re.sub(r'\W', '', login)}_{re.sub(r'[^\w-]', '_', c['id'])}.mp4",
+        credito=f"CLIPE: twitch.tv/{login}",
+        creditos=(f"🎥 Créditos: {nome} - https://twitch.tv/{login}\n"
+                  f"Clipe original: {c['url']}\nClipado por: {c['creator_name']}"),
+        info={"plataforma": "twitch", "streamer": nome, "login": login,
+              "canal_url": f"https://twitch.tv/{login}", "views": c["view_count"],
+              "url": c["url"], "titulo_original": c["title"], "autorizado": c["_autorizado"],
+              "clipe_criado_em": c.get("created_at", "")},
+        usados=(USADOS_TWITCH, c["id"]), tg=tg,
+        legenda_tg=f"🎬 {nome} | 👁 {c['view_count']} views | {c['duration']:.0f}s\n"
+                   f"\"{c['title']}\"\n{c['url']}")
 
 
 def finalizar_corte(cfg_c, video: Path, ini: float, fim: float, gancho: str, destino: Path,
@@ -1314,7 +1329,16 @@ def finalizar_corte(cfg_c, video: Path, ini: float, fim: float, gancho: str, des
     e manda pro Telegram aprovar."""
     gancho = gancho or random.choice(cfg_c["ganchos"])
     print(f"   -> renderizando \"{gancho}\"", flush=True)
-    textos = renderizar(video, ini, fim, gancho, destino, cfg_c, credito=credito)
+    try:
+        textos = renderizar(video, ini, fim, gancho, destino, cfg_c, credito=credito)
+    except Exception as e:  # noqa: BLE001 - um clipe com problema não pode parar a rodada
+        print(f"   [erro editando ({type(e).__name__}: {str(e)[:150]}); tentando sem legenda]")
+        sem = dict(cfg_c, legenda=dict(cfg_c.get("legenda", {}), ativar=False))
+        try:
+            textos = renderizar(video, ini, fim, gancho, destino, sem, credito=credito)
+        except Exception as e2:  # noqa: BLE001
+            print(f"   [não deu pra editar esse clipe: {type(e2).__name__}: {str(e2)[:150]}]")
+            return False
     escrever_legenda(destino, gancho, cfg_c, textos, creditos)
     destino.with_suffix(".json").write_text(json.dumps(info, ensure_ascii=False, indent=1),
                                             encoding="utf-8")
