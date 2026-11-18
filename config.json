@@ -62,8 +62,8 @@
     ],
     "descobrir": {
       "ativar": true,
-      "idiomas": ["pt"],
-      "todos_os_jogos": true,
+      "idiomas": [],
+      "todos_os_jogos": false,
       "top_jogos": 15,
       "dias": 7,
       "min_visualizacoes": 300,
@@ -71,9 +71,18 @@
       "max_por_streamer": 2,
       "paginas": 5
     },
+    "ao_vivo": {
+      "ativar": true,
+      "idiomas": [],
+      "min_espectadores": 1000,
+      "horas": 8,
+      "max_lives": 15,
+      "clipes_por_live": 2,
+      "min_visualizacoes": 20
+    },
     "nunca_pegar": [],
-    "jogos": ["Grand Theft Auto V", "Grand Theft Auto VI"],
-    "streamers_qualquer_jogo": true,
+    "jogos": ["Grand Theft Auto VI"],
+    "streamers_qualquer_jogo": false,
     "so_autorizados": false,
     "dias": 14,
     "clipes_por_streamer": 3,
@@ -89,15 +98,15 @@
       "{gancho} | {streamer}",
       "{streamer}: {gancho} 😳"
     ],
-    "hashtags": ["#twitch", "#clips", "#cortes", "#streamer", "#games", "#fyp", "#viral", "#foryou", "#shorts"]
+    "hashtags": ["#gta6", "#gtavi", "#gta", "#vicecity", "#twitch", "#clips", "#fyp", "#viral", "#shorts"]
   },
 
   "youtube": {
-    "buscas": ["gta rp", "gta 5 rp", "gta rp live", "gta 6"],
-    "canais": [
-      {"canal": "@PaulinhoLOKOoficial", "autorizado": false, "como_autorizou": "remove se pedir (política do site)"}
-    ],
-    "fila": [
+    "buscas": ["gta 6", "gta 6 gameplay", "gta 6 live", "gta 6 ao vivo", "gta vi"],
+    "exigir_no_titulo": ["gta 6", "gta vi", "gta6", "gtavi"],
+    "canais": [],
+    "fila": [],
+    "fila_pausada_gta_rp_paulinho": [
       "https://www.youtube.com/watch?v=U9BJ03LHTNw",
       "https://www.youtube.com/watch?v=abL_AdXG2Zo",
       "https://www.youtube.com/watch?v=XwR7ExYEvu0",
@@ -117,14 +126,14 @@
     "nunca_pegar": [],
     "dias": 7,
     "min_visualizacoes": 30000,
-    "min_duracao_min": 20,
+    "min_duracao_min": 8,
     "max_videos": 6,
     "max_por_canal": 2,
     "cortes_por_video": 1,
     "segundos_por_corte": 45,
     "usar_titulo_do_video": true,
     "recorte_laterais": 1.0,
-    "hashtags": ["#gta", "#gtarp", "#cortes", "#fyp", "#viral", "#shorts"]
+    "hashtags": ["#gta6", "#gtavi", "#gta", "#vicecity", "#leonida", "#fyp", "#viral", "#shorts"]
   },
 
   "curiosidades": [
