@@ -1263,29 +1263,45 @@ def buscar_youtube(cfg: dict) -> list:
               if USADOS_YOUTUBE.exists() else set())
     limite = (datetime.now() - timedelta(days=dias)).strftime("%Y%m%d")
     escolhidos, por_canal = [], {}
+    motivos, primeiro_erro = {}, ""
+    pula = lambda m: motivos.__setitem__(m, motivos.get(m, 0) + 1)
     print(f"   analisando {len(candidatos)} vídeo(s)...", flush=True)
+    segundos = yt.get("segundos_por_corte", 45)
     for vid, origem in candidatos.items():
         info, erro = _ytdlp_json(["--skip-download", f"https://www.youtube.com/watch?v={vid}"])
         if not info:
+            pula("o YouTube não deixou ler o vídeo")
+            primeiro_erro = primeiro_erro or erro
             continue
         handle = (info.get("uploader_id") or info.get("channel_id") or "").lower()
         if handle in bloqueados or (info.get("channel") or "").lower() in bloqueados:
+            pula("canal em 'nunca pegar'")
             continue
         idioma = (info.get("language") or "").lower()
         if idioma and not idioma.startswith("pt"):
+            pula("não é em português")
             continue
         if origem != "fila" and (info.get("upload_date") or "99999999") < limite:
+            pula("mais antigo que o limite de dias")
             continue
         if (info.get("duration") or 0) < yt.get("min_duracao_min", 20) * 60:
-            continue  # curto demais: normalmente já é um corte de outro canal
-        if origem == "busca" and (info.get("view_count") or 0) < yt.get("min_visualizacoes", 0):
+            pula("curto demais (provável corte de outro canal)")
             continue
-        cortes = [m for m in momentos_virais(info.get("heatmap"), info["duration"],
-                                             yt.get("cortes_por_video", 1), yt.get("segundos_por_corte", 45))
-                  if f"{vid}@{int(m[0]) // 30}" not in usados]
+        if origem == "busca" and (info.get("view_count") or 0) < yt.get("min_visualizacoes", 0):
+            pula("poucas views")
+            continue
+        momentos = momentos_virais(info.get("heatmap"), info["duration"],
+                                   yt.get("cortes_por_video", 1), segundos)
+        if not momentos and origem == "fila":
+            # sem o gráfico de "mais repetidos": pega um trecho a 1/3 do vídeo
+            ini = info["duration"] / 3
+            momentos = [(ini, ini + segundos, 0.0)]
+        cortes = [m for m in momentos if f"{vid}@{int(m[0]) // 30}" not in usados]
         if not cortes:
+            pula("sem gráfico de mais repetidos" if not momentos else "trecho já usado")
             continue
         if origem != "fila" and por_canal.get(handle, 0) >= yt.get("max_por_canal", 2):
+            pula("limite por canal")
             continue
         por_canal[handle] = por_canal.get(handle, 0) + 1
         conf = canais.get(handle) or canais.get((info.get("channel") or "").lower()) or {}
@@ -1293,6 +1309,10 @@ def buscar_youtube(cfg: dict) -> list:
         info["_cortes"] = cortes
         info["_fila"] = origem == "fila"
         escolhidos.append(info)
+    for m, n in sorted(motivos.items(), key=lambda x: -x[1]):
+        print(f"   descartados: {n} - {m}")
+    if primeiro_erro:
+        print(f"   erro do YouTube: {primeiro_erro[:200]}")
     # os da fila vêm primeiro e não contam no limite; depois os mais vistos da busca
     fila = sorted([i for i in escolhidos if i["_fila"]], key=lambda i: -(i.get("view_count") or 0))
     resto = sorted([i for i in escolhidos if not i["_fila"]], key=lambda i: -(i.get("view_count") or 0))
