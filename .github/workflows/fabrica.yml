@@ -37,9 +37,13 @@ jobs:
 
       - name: Instalar
         run: |
-          python -m pip install -q -U numpy imageio-ffmpeg edge-tts "yt-dlp[default]" deno
+          python -m pip install -q -U numpy imageio-ffmpeg edge-tts "yt-dlp[default]" deno faster-whisper
           echo "ttf-mscorefonts-installer msttcorefonts/accept-mscorefonts-eula select true" | sudo debconf-set-selections
-          sudo apt-get install -y -q ttf-mscorefonts-installer fonts-dejavu-core > /dev/null || true
+          sudo apt-get update -q > /dev/null
+          sudo apt-get install -y -q ffmpeg ttf-mscorefonts-installer fonts-dejavu-core > /dev/null || true
+          # ffmpeg do sistema (tem libass, que desenha a legenda das falas)
+          echo "IMAGEIO_FFMPEG_EXE=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+          fc-cache -f > /dev/null || true
           F=/usr/share/fonts/truetype/msttcorefonts/Arial_Black.ttf
           [ -f "$F" ] || F=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
           echo "FABRICA_FONTE=$F" >> "$GITHUB_ENV"
@@ -54,6 +58,13 @@ jobs:
             saida/.tg_offset
           key: estado-${{ github.run_id }}
           restore-keys: estado-
+
+      # modelo da legenda (~500 MB) baixado uma vez só
+      - name: Modelo da legenda
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-small-v1
 
       - name: Chaves
         run: |
@@ -73,13 +84,13 @@ jobs:
         if: github.event_name == 'schedule' || inputs.fonte != 'youtube'
         run: |
           echo "===== TWITCH =====" >> rodada.log
-          python -u fabrica.py --twitch --sem-legenda 2>&1 | tee -a rodada.log || true
+          python -u fabrica.py --twitch 2>&1 | tee -a rodada.log || true
 
       - name: YouTube
         if: github.event_name == 'schedule' || inputs.fonte != 'twitch'
         run: |
           echo "===== YOUTUBE =====" >> rodada.log
-          python -u fabrica.py --youtube --sem-legenda 2>&1 | tee -a rodada.log || true
+          python -u fabrica.py --youtube 2>&1 | tee -a rodada.log || true
 
       # os vídeos ficam 7 dias pra baixar: Actions > a rodada > "Artifacts" > videos
       - name: Guardar os vídeos

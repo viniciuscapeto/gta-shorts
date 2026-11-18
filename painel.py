@@ -95,7 +95,7 @@ def rodar_tarefa(nome: str, func):
 
 def cfg_com_legenda():
     cfg = F.carregar_config()
-    if cfg.get("legenda", {}).get("ativar") and not F.preparar_whisper(cfg):
+    if cfg.get("legenda", {}).get("ativar") and not F.legenda_disponivel() and not F.preparar_whisper(cfg):
         print("Seguindo sem legenda (não consegui baixar o whisper).")
         cfg["legenda"]["ativar"] = False
     return cfg

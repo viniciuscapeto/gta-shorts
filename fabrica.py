@@ -351,16 +351,46 @@ def traduzir(texto: str, para: str) -> str:
         return texto
 
 
+def _tem_faster_whisper() -> bool:
+    try:
+        import faster_whisper  # noqa: F401  (usado na nuvem/Linux, onde não tem o whisper.cpp)
+        return True
+    except ImportError:
+        return False
+
+
+def legenda_disponivel() -> bool:
+    return bool(achar_whisper_exe()) or _tem_faster_whisper()
+
+
+_FW = {}
+
+
+def _transcrever_fw(wav: Path, leg: dict):
+    """faster-whisper: devolve (idioma, [(inicio, fim, texto)])."""
+    from faster_whisper import WhisperModel
+    modelo = leg.get("modelo", "small")
+    if modelo not in _FW:
+        _FW[modelo] = WhisperModel(modelo, device="cpu", compute_type="int8")
+    idioma = leg.get("idioma_do_jogo", "auto")
+    segs, info = _FW[modelo].transcribe(str(wav), language=None if idioma == "auto" else idioma,
+                                        vad_filter=True, beam_size=5)
+    return info.language or "", [(s.start, s.end, s.text) for s in segs]
+
+
 def transcrever(video: Path, ini: float, dur: float, cfg: dict):
     """Retorna lista de (inicio, fim, texto) das falas do jogo dentro do corte."""
     leg = cfg.get("legenda", {})
     exe = achar_whisper_exe()
-    if not exe:
+    if not exe and not _tem_faster_whisper():
         return []
     TMP.mkdir(exist_ok=True)
     wav, saida = TMP / "fala_jogo.wav", TMP / "fala_jogo"
     subprocess.run([FFMPEG, "-v", "error", "-y", "-ss", f"{ini:.2f}", "-t", f"{dur:.2f}",
                     "-i", str(video), "-vn", "-ac", "1", "-ar", "16000", str(wav)], check=True)
+    if not exe:
+        idioma, segs = _transcrever_fw(wav, leg)
+        return _montar_legendas(idioma, [(a, b, t) for a, b, t in segs], dur, leg)
     base = [str(exe), "-m", str(WHISPER / f"ggml-{leg.get('modelo', 'small')}.bin"),
             "-f", str(wav), "-l", leg.get("idioma_do_jogo", "auto"), "-oj", "-of", str(saida),
             "-np",
@@ -375,14 +405,19 @@ def transcrever(video: Path, ini: float, dur: float, cfg: dict):
     if not json_out.exists():
         return []
     dados = json.loads(json_out.read_text(encoding="utf-8", errors="ignore"))
-    idioma = dados.get("result", {}).get("language", "")
+    segs = [(s["offsets"]["from"] / 1000, s["offsets"]["to"] / 1000, s.get("text", ""))
+            for s in dados.get("transcription", [])]
+    return _montar_legendas(dados.get("result", {}).get("language", ""), segs, dur, leg)
+
+
+def _montar_legendas(idioma: str, segs: list, dur: float, leg: dict):
+    """Limpa, traduz se precisar e quebra em blocos curtos: [(inicio, fim, texto)]."""
     para = leg.get("traduzir_para", "")
     falas = []
-    for s in dados.get("transcription", []):
-        texto = re.sub(r"\[.*?\]|\(.*?\)|♪", "", s.get("text", "")).strip()
+    for a, b, bruto in segs:
+        texto = re.sub(r"\[.*?\]|\(.*?\)|♪", "", bruto).strip()
         if len(texto) < 2 or ALUCINACOES.match(texto):
             continue
-        a, b = s["offsets"]["from"] / 1000, s["offsets"]["to"] / 1000
         if b - a < 0.4:
             b = a + 0.8
         falas.append([a, min(b, dur), texto])
@@ -508,7 +543,7 @@ def renderizar(video: Path, ini: float, fim: float, gancho: str, destino: Path, 
             legendas = [(0, 0, "")]  # só pra ligar o filtro de legenda
     else:
         falas = montar_narracao(gancho, dur, cfg, fala_inicio)
-        if audio_jogo and cfg.get("legenda", {}).get("ativar", False) and achar_whisper_exe():
+        if audio_jogo and cfg.get("legenda", {}).get("ativar", False) and legenda_disponivel():
             legendas = transcrever(video, ini, dur, cfg)
         if legendas:
             escrever_ass(legendas, ass, cfg)
@@ -1529,7 +1564,8 @@ if __name__ == "__main__":
                                                       "--youtube-listar",
                                                       "--aprovar", "--testar-telegram",
                                                       "--painel", "--telegram-respostas"} & set(sys.argv):
-        if not preparar_whisper(cfg):
+        # Windows: baixa o whisper.cpp; Linux/nuvem: usa o faster-whisper (pip)
+        if not (sys.platform != "win32" and _tem_faster_whisper()) and not preparar_whisper(cfg):
             print("   Seguindo SEM legenda (rode de novo com internet pra baixar o whisper).")
             cfg["legenda"]["ativar"] = False
     if "--instalar-legenda" in sys.argv:
