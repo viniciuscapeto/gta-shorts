@@ -1234,6 +1234,8 @@ def modo_twitch(cfg, so_listar=False):
         if not video:
             continue
         gancho = limpar_titulo(c["title"]) if tw.get("usar_titulo_do_clipe", True) else ""
+        if len(gancho.replace(" ", "")) < 8:
+            gancho = ""  # título tipo "b" ou "kkk": usa um dos ganchos prontos do config
         cfg_c = dict(base)
         cfg_c["titulos"] = [t.replace("{streamer}", nome) for t in tw.get("titulos", cfg["titulos"])]
         cfg_c["hashtags"] = base["hashtags"] + [f"#{re.sub(r'\W', '', login)}"]
