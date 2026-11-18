@@ -840,15 +840,16 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
 
     def live_ok(s):
         """Live na categoria GTA 6 mas jogando RP de GTA 5 (título com 'RP', 'cidade'...)."""
+        # compara PALAVRA inteira: "gta v" não pode pegar "gta vi", nem "rp" pegar "rpg"
         t = f" {re.sub(r'[^\w]+', ' ', (s.get('title') or '').lower())} "
-        ruim = next((p for p in rp if f" {p} " in t or (len(p) > 4 and p in t)), None)
+        ruim = next((p for p in rp if f" {p} " in t), None)
         if ruim:
             print(f"   (ignorando {s['user_name']}: título da live tem \"{ruim}\" -> provável GTA 5 RP)")
         return not ruim
 
     def titulo_ok(c):
-        t = f" {(c.get('title') or '').lower()} "
-        return not any(p in t for p in proibidos)
+        t = f" {re.sub(r'[^\w]+', ' ', (c.get('title') or '').lower())} "
+        return not any(f" {p.strip()} " in t for p in proibidos)
 
     def bom(c, minimo, qualquer_jogo=False):
         return ((qualquer_jogo or c["game_id"] in ids_jogos) and c["id"] not in usados
