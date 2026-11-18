@@ -55,7 +55,7 @@
   "twitch": {
     "streamers": [
       {"login": "tonyboy", "autorizado": true, "como_autorizou": "falou que libera (guardar print)"},
-      {"login": "alanzoka", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
+      {"login": "alanzoka", "autorizado": false, "clipes": 8, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
       {"login": "gaules", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
       {"login": "bisteconee", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
       {"login": "cellbit", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},

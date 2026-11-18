@@ -907,12 +907,14 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
                      if achadas else ""))
         antes = len(escolhidos)
         for s in lives:
+            # streamer da lista com "clipes" próprio (ex.: alanzoka: 8) traz mais da live dele
+            quer = streamers.get((s.get("user_login") or "").lower(), {}).get(
+                "clipes", vivo.get("clipes_por_live", 2))
             achados = _paginar_clipes(
                 [("broadcaster_id", s["user_id"])] + periodo(vivo.get("horas", 8) / 24),
-                cab, lambda c: bom(c, vivo.get("min_visualizacoes", 20)), 2,
-                vivo.get("clipes_por_live", 2))
+                cab, lambda c: bom(c, vivo.get("min_visualizacoes", 20)), 2, quer)
             achados.sort(key=lambda c: -c["view_count"])
-            for c in achados[:vivo.get("clipes_por_live", 2)]:
+            for c in achados[:quer]:
                 escolhidos[c["id"]] = c
         print(f"   Clipes das lives de agora: {len(escolhidos) - antes}")
     # (2) os streamers da lista: todos (os sem "liberou" chegam com aviso pra você decidir),
@@ -930,7 +932,7 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
         em_rp = {s["user_id"] for s in no_ar if not live_ok(s)}
         usuarios = [u for u in usuarios if u["id"] not in em_rp]
         for u in usuarios:
-            quer = tw.get("clipes_por_streamer", 3)
+            quer = streamers.get(u["login"], {}).get("clipes", tw.get("clipes_por_streamer", 3))
             achados = _paginar_clipes([("broadcaster_id", u["id"])] + periodo(tw.get("dias", 7)),
                                       cab, lambda c: bom(c, tw.get("min_visualizacoes", 0), qualquer),
                                       5, quer)
