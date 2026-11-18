@@ -6,7 +6,8 @@
   "recorte_laterais": 0.78,
   "letras_por_linha": 18,
   "fonte": "C:/Windows/Fonts/ariblk.ttf",
-  "seu_arroba": "@seuperfil",
+  "seu_arroba": "@tresestrelasclips",
+  "nome_da_pagina": "Três Estrelas",
 
   "narracao": {
     "ativar": true,
@@ -49,6 +50,42 @@
     "legendar_narracao": true,
     "letras_por_bloco_narracao": 18,
     "letras_por_linha_narracao": 14
+  },
+
+  "twitch": {
+    "streamers": [
+      {"login": "tonyboy", "autorizado": true, "como_autorizou": "falou que libera (guardar print)"},
+      {"login": "alanzoka", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
+      {"login": "gaules", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
+      {"login": "bistecone", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
+      {"login": "cellbit", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"}
+    ],
+    "descobrir": {
+      "ativar": true,
+      "idiomas": ["pt"],
+      "dias": 3,
+      "min_visualizacoes": 2000,
+      "max_clipes": 10,
+      "max_por_streamer": 2,
+      "paginas": 5
+    },
+    "nunca_pegar": [],
+    "jogos": ["Grand Theft Auto V", "Grand Theft Auto VI"],
+    "dias": 14,
+    "clipes_por_streamer": 3,
+    "min_visualizacoes": 1000,
+    "min_segundos": 8,
+    "usar_titulo_do_clipe": true,
+    "recorte_laterais": 1.0,
+    "narracao": {
+      "falar_gancho_no_inicio": false
+    },
+    "titulos": [
+      "{gancho} 😂 | {streamer}",
+      "{gancho} | {streamer} no GTA",
+      "{streamer}: {gancho} #gta"
+    ],
+    "hashtags": ["#gta", "#gtarp", "#twitch", "#clips", "#fyp", "#viral", "#shorts"]
   },
 
   "curiosidades": [

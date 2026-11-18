@@ -13,6 +13,13 @@ Uso:
     python fabrica.py --sem-legenda -> (junto com os outros) desliga a legenda das falas
     python fabrica.py --curiosidade -> narra as curiosidades do config.json por cima do gameplay
     python fabrica.py --instalar-legenda -> baixa o whisper.cpp + modelo (uma vez só)
+    python fabrica.py --twitch      -> baixa os clipes de GTA mais vistos dos streamers
+                                       autorizados (config.json > twitch) e edita com crédito
+    python fabrica.py --twitch-listar -> só mostra quais clipes pegaria
+    python fabrica.py --painel      -> abre o painel no navegador (aprovar + controle por rede)
+    python fabrica.py --testar-telegram -> conecta o bot do Telegram (1ª vez)
+    python fabrica.py --aprovar     -> fica ouvindo os botões Aprovar/Recusar do Telegram
+                                       e move os vídeos pra saida/aprovados ou recusados
 """
 import asyncio
 import hashlib
@@ -23,6 +30,8 @@ import re
 import subprocess
 import sys
 import textwrap
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -472,9 +481,10 @@ def esc(caminho: Path) -> str:
 
 
 def renderizar(video: Path, ini: float, fim: float, gancho: str, destino: Path, cfg: dict,
-               fala_inicio: str = "", roteiro=None) -> list:
+               fala_inicio: str = "", roteiro=None, credito: str = "") -> list:
     """Renderiza o corte. Retorna (textos narrados, legendas das falas do jogo).
-    roteiro = (wav, dur, palavras, texto): narração contínua (modo curiosidade)."""
+    roteiro = (wav, dur, palavras, texto): narração contínua (modo curiosidade).
+    credito = texto fixo logo acima do vídeo (ex.: "CLIPE: twitch.tv/fulano")."""
     TMP.mkdir(exist_ok=True)
     dur = fim - ini
     audio_jogo = tem_audio(video)
@@ -499,6 +509,13 @@ def renderizar(video: Path, ini: float, fim: float, gancho: str, destino: Path, 
     perfil.write_text(cfg.get("seu_arroba", ""), encoding="utf-8", newline="\n")
     fonte = esc(Path(cfg["fonte"]))
     zoom = cfg["recorte_laterais"]  # 0.78 = mantém 78% da largura (dá mais destaque ao centro)
+    texto_credito = ""
+    if credito:
+        arq_credito = TMP / "credito.txt"
+        arq_credito.write_text(credito, encoding="utf-8", newline="\n")
+        texto_credito = (f"drawtext=fontfile='{fonte}':textfile='{esc(arq_credito)}':"
+                         "fontsize=40:fontcolor=0xFFE500:borderw=4:bordercolor=black:"
+                         "x=(w-text_w)/2:y=535,")
 
     filtro = (
         "[0:v]split=2[a][b];"
@@ -509,7 +526,7 @@ def renderizar(video: Path, ini: float, fim: float, gancho: str, destino: Path, 
         f"[v0]drawtext=fontfile='{fonte}':textfile='{esc(txt)}':text_align=C:"
         "fontsize=78:fontcolor=white:borderw=7:bordercolor=black:line_spacing=12:"
         "x=(w-text_w)/2:y=520-text_h[v1];"
-        f"[v1]drawtext=fontfile='{fonte}':textfile='{esc(perfil)}':"
+        f"[v1]{texto_credito}drawtext=fontfile='{fonte}':textfile='{esc(perfil)}':"
         "fontsize=44:fontcolor=white@0.85:borderw=4:bordercolor=black:"
         "x=(w-text_w)/2:y=h-360,fps=fps='min(source_fps,60)'"
         + (f",subtitles=filename='{esc(ass)}':fontsdir='{esc(Path(cfg['fonte']).parent)}'"
@@ -554,15 +571,16 @@ def renderizar(video: Path, ini: float, fim: float, gancho: str, destino: Path, 
     return [f[3] for f in falas], [l[2] for l in legendas if l[2]]
 
 
-def escrever_legenda(destino: Path, gancho: str, cfg: dict, textos=((), ())):
+def escrever_legenda(destino: Path, gancho: str, cfg: dict, textos=((), ()), creditos: str = ""):
     falas, legendas = textos
     titulo = random.choice(cfg["titulos"]).replace("{gancho}", gancho)
     tags = " ".join(cfg["hashtags"])
+    corpo = f"{titulo}\n\n{creditos}\n\n{tags}" if creditos else f"{titulo} {tags}"
     narrado = ("\n\nNARRAÇÃO:\n" + "\n".join(f"- {f}" for f in falas)) if falas else ""
     jogo = ("\n\nFALAS DO JOGO (legendadas):\n" + "\n".join(f"- {l}" for l in legendas)
             if legendas else "")
     destino.with_suffix(".txt").write_text(
-        f"TÍTULO:\n{titulo}\n\nLEGENDA (copiar e colar):\n{titulo} {tags}{narrado}{jogo}\n",
+        f"TÍTULO:\n{titulo}\n\nLEGENDA (copiar e colar):\n{corpo}{narrado}{jogo}\n",
         encoding="utf-8")
 
 
@@ -672,6 +690,522 @@ def modo_curiosidade(cfg):
                 f.write(c["gancho"] + "\n")
 
 
+# ---------------------------------------------------------------- clipes da Twitch
+CLIPES = BASE / "clipes"
+SEGREDOS = BASE / "segredos.json"
+USADOS_TWITCH = SAIDA / ".clipes_usados.txt"
+
+
+def _twitch_get(caminho: str, params, cab: dict) -> dict:
+    url = f"https://api.twitch.tv/helix/{caminho}?{urllib.parse.urlencode(params)}"
+    with urllib.request.urlopen(urllib.request.Request(url, headers=cab), timeout=20) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+CHAVES_SEGREDOS = ["twitch_client_id", "twitch_client_secret", "telegram_token", "telegram_chat_id"]
+
+
+def ler_segredos() -> dict:
+    """Lê o segredos.json, criando (ou completando) os campos que faltarem."""
+    seg = json.loads(SEGREDOS.read_text(encoding="utf-8-sig")) if SEGREDOS.exists() else {}
+    if any(k not in seg for k in CHAVES_SEGREDOS):
+        for k in CHAVES_SEGREDOS:
+            seg.setdefault(k, "")
+        salvar_segredos(seg)
+    return seg
+
+
+def salvar_segredos(seg: dict):
+    SEGREDOS.write_text(json.dumps(seg, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def twitch_conectar():
+    """Pega um token de app com o Client ID/Secret do segredos.json."""
+    seg = ler_segredos()
+    cid = seg.get("twitch_client_id", "").strip()
+    secret = seg.get("twitch_client_secret", "").strip()
+    if not cid or not secret:
+        print(f"Preencha twitch_client_id e twitch_client_secret no arquivo {SEGREDOS}\n"
+              "(crie o app grátis em https://dev.twitch.tv/console/apps).")
+        return None
+    dados = urllib.parse.urlencode({"client_id": cid, "client_secret": secret,
+                                    "grant_type": "client_credentials"}).encode()
+    try:
+        with urllib.request.urlopen("https://id.twitch.tv/oauth2/token", data=dados,
+                                    timeout=20) as r:
+            token = json.loads(r.read().decode("utf-8"))["access_token"]
+    except urllib.error.HTTPError as e:
+        print(f"A Twitch recusou o login ({e.code}). Confira o Client ID e o Secret.")
+        return None
+    return {"Client-Id": cid, "Authorization": f"Bearer {token}"}
+
+
+def limpar_titulo(titulo: str, maximo: int = 60) -> str:
+    """Tira emoji/símbolo (a fonte não desenha) e encurta sem cortar palavra."""
+    t = re.sub(r"[^\w\s.,!?'\"\-:()%$#@&]", "", titulo)
+    t = re.sub(r"\s+", " ", t).strip(" -|")
+    if len(t) > maximo:
+        t = t[:maximo].rsplit(" ", 1)[0] + "..."
+    return t
+
+
+def _paginar_clipes(params_base: list, cab: dict, filtro, paginas: int, quer: int) -> list:
+    """Busca clipes (a Twitch já devolve do mais visto pro menos) aplicando o filtro."""
+    achados, cursor = [], None
+    for _ in range(paginas):
+        params = params_base + [("first", 100)] + ([("after", cursor)] if cursor else [])
+        r = _twitch_get("clips", params, cab)
+        achados += [c for c in r["data"] if filtro(c)]
+        cursor = r.get("pagination", {}).get("cursor")
+        if not cursor or len(achados) >= quer:
+            break
+    return achados
+
+
+def buscar_clipes(cfg: dict, cab: dict) -> list:
+    """Junta: (1) os clipes mais vistos de GTA da Twitch inteira no idioma escolhido e
+    (2) os dos streamers da lista. Cada clipe sai marcado com _autorizado True/False."""
+    from datetime import datetime, timedelta, timezone
+    tw = cfg["twitch"]
+    desc = tw.get("descobrir", {})
+    streamers = {s["login"].strip().lower(): s for s in tw.get("streamers", [])}
+    autorizados = {l for l, s in streamers.items() if s.get("autorizado")}
+    bloqueados = {l.strip().lower() for l in tw.get("nunca_pegar", [])}
+    jogos = _twitch_get("games", [("name", n) for n in tw["jogos"]], cab)["data"]
+    ids_jogos = {j["id"] for j in jogos}
+    print("Jogos: " + (", ".join(j["name"] for j in jogos) or "nenhum achado na Twitch"))
+    usados = (set(USADOS_TWITCH.read_text(encoding="utf-8").split())
+              if USADOS_TWITCH.exists() else set())
+    agora = datetime.now(timezone.utc)
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    periodo = lambda dias: [("started_at", (agora - timedelta(days=dias)).strftime(fmt)),
+                            ("ended_at", agora.strftime(fmt))]
+    idiomas = tuple(i.lower() for i in desc.get("idiomas", ["pt"]))
+
+    def bom(c, minimo):
+        return (c["game_id"] in ids_jogos and c["id"] not in usados
+                and c["broadcaster_name"].lower() not in bloqueados
+                and c["view_count"] >= minimo
+                and c["duration"] >= tw.get("min_segundos", 8))
+
+    escolhidos = {}
+    # (1) os virais da Twitch inteira
+    if desc.get("ativar", True):
+        minimo = desc.get("min_visualizacoes", tw.get("min_visualizacoes", 0))
+        filtro = lambda c: bom(c, minimo) and (c.get("language") or "").lower().startswith(idiomas)
+        achados = []
+        for gid in ids_jogos:
+            achados += _paginar_clipes([("game_id", gid)] + periodo(desc.get("dias", 3)), cab,
+                                       filtro, desc.get("paginas", 5), 999)
+        achados.sort(key=lambda c: -c["view_count"])
+        por_canal = {}
+        for c in achados:
+            canal = c["broadcaster_name"].lower()
+            if por_canal.get(canal, 0) >= desc.get("max_por_streamer", 2):
+                continue  # variedade: não deixa um streamer só dominar a lista
+            por_canal[canal] = por_canal.get(canal, 0) + 1
+            escolhidos[c["id"]] = c
+            if len(escolhidos) >= desc.get("max_clipes", 10):
+                break
+        print(f"   Virais de GTA ({'/'.join(idiomas)}): {len(escolhidos)} clipe(s) novo(s)")
+    # (2) os streamers da lista (só os autorizados)
+    if autorizados:
+        usuarios = _twitch_get("users", [("login", l) for l in autorizados], cab)["data"]
+        for l in autorizados - {u["login"] for u in usuarios}:
+            print(f"   [não achei o canal twitch.tv/{l}; confira o login no config.json]")
+        for u in usuarios:
+            quer = tw.get("clipes_por_streamer", 3)
+            achados = _paginar_clipes([("broadcaster_id", u["id"])] + periodo(tw.get("dias", 7)),
+                                      cab, lambda c: bom(c, tw.get("min_visualizacoes", 0)), 5, quer)
+            achados.sort(key=lambda c: -c["view_count"])
+            for c in achados[:quer]:
+                escolhidos[c["id"]] = c
+            print(f"   {u['display_name']}: {len(achados)} clipe(s) novo(s) de GTA")
+    # o clipe só traz o nome de exibição; o login (o do link twitch.tv/...) vem por id
+    ids = list({c["broadcaster_id"] for c in escolhidos.values()})
+    logins = {}
+    for i in range(0, len(ids), 100):
+        for u in _twitch_get("users", [("id", x) for x in ids[i:i + 100]], cab)["data"]:
+            logins[u["id"]] = u["login"]
+    for c in escolhidos.values():
+        c["_login"] = logins.get(c["broadcaster_id"], c["broadcaster_name"].lower())
+        c["_autorizado"] = c["_login"] in autorizados
+    return sorted(escolhidos.values(), key=lambda c: -c["view_count"])
+
+
+def baixar_clipe(clipe: dict):
+    CLIPES.mkdir(exist_ok=True)
+    destino = CLIPES / (re.sub(r"[^\w-]", "_", clipe["id"]) + ".mp4")
+    if destino.exists():
+        return destino
+    r = subprocess.run([sys.executable, "-m", "yt_dlp", "-q", "--no-warnings",
+                        "-f", "best[ext=mp4]/best", "-o", str(destino), clipe["url"]],
+                       capture_output=True, text=True, encoding="utf-8", errors="ignore")
+    if r.returncode != 0 or not destino.exists():
+        print(f"   [não consegui baixar: {(r.stderr or '').strip()[-200:]}]")
+        return None
+    return destino
+
+
+# ---------------------------------------------------------------- aprovação pelo Telegram
+APROVADOS = SAIDA / "aprovados"
+RECUSADOS = SAIDA / "recusados"
+PENDENTES_TG = SAIDA / ".telegram_pendentes.json"
+
+
+def _tg(token: str, metodo: str, dados: dict = None, arquivo=None, timeout: int = 60) -> dict:
+    """Chama a API do bot. arquivo = (campo, Path) pra mandar vídeo (multipart)."""
+    url = f"https://api.telegram.org/bot{token}/{metodo}"
+    if arquivo:
+        limite = "----vicediario" + hashlib.md5(os.urandom(8)).hexdigest()
+        corpo = b""
+        for k, v in (dados or {}).items():
+            corpo += (f"--{limite}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n"
+                      f"{v}\r\n").encode("utf-8")
+        campo, caminho = arquivo
+        corpo += (f"--{limite}\r\nContent-Disposition: form-data; name=\"{campo}\"; "
+                  f"filename=\"{caminho.name}\"\r\nContent-Type: video/mp4\r\n\r\n").encode("utf-8")
+        corpo += caminho.read_bytes() + f"\r\n--{limite}--\r\n".encode("utf-8")
+        req = urllib.request.Request(url, data=corpo, headers={
+            "Content-Type": f"multipart/form-data; boundary={limite}"})
+    else:
+        req = urllib.request.Request(url, data=json.dumps(dados or {}).encode("utf-8"),
+                                     headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            return json.loads(e.read().decode("utf-8"))
+        except Exception:
+            return {"ok": False, "description": f"HTTP {e.code}"}
+
+
+def telegram_conectar(avisar: bool = True):
+    """Devolve (token, chat_id) ou None. Descobre o chat_id sozinho na 1ª vez."""
+    seg = ler_segredos()
+    token = str(seg.get("telegram_token", "")).strip()
+    if not token:
+        if avisar:
+            print(f"Preencha telegram_token em {SEGREDOS} (crie o bot no @BotFather).")
+        return None
+    chat = str(seg.get("telegram_chat_id", "")).strip()
+    if not chat:
+        r = _tg(token, "getUpdates", {"timeout": 0})
+        if not r.get("ok"):
+            print(f"Telegram recusou o token: {r.get('description')}")
+            return None
+        chats = [u["message"]["chat"]["id"] for u in r["result"] if "message" in u]
+        if not chats:
+            print("Abra o seu bot no Telegram, mande /start pra ele e rode de novo.")
+            return None
+        chat = str(chats[-1])
+        seg["telegram_chat_id"] = chat
+        salvar_segredos(seg)
+        _tg(token, "sendMessage", {"chat_id": chat, "text": "✅ Bot conectado! "
+                                   "Os vídeos pra aprovar vão chegar aqui."})
+    return token, chat
+
+
+def telegram_enviar_pra_aprovar(tg, video: Path, legenda: str):
+    token, chat = tg
+    if video.stat().st_size > 49 * 1024 * 1024:
+        print("   [vídeo passou de 50 MB, o bot do Telegram não aceita; aprove pela pasta]")
+        return
+    chave = hashlib.md5(video.name.encode("utf-8")).hexdigest()[:10]
+    botoes = {"inline_keyboard": [[{"text": "✅ Aprovar", "callback_data": f"ok:{chave}"},
+                                   {"text": "❌ Recusar", "callback_data": f"no:{chave}"}]]}
+    print("   -> enviando pro Telegram ...", end="", flush=True)
+    r = _tg(token, "sendVideo", {"chat_id": chat, "caption": legenda[:1000],
+                                 "supports_streaming": "true",
+                                 "reply_markup": json.dumps(botoes)},
+            arquivo=("video", video), timeout=300)
+    if not r.get("ok"):
+        print(f" falhou: {r.get('description')}")
+        return
+    print(" ok")
+    pend = json.loads(PENDENTES_TG.read_text(encoding="utf-8")) if PENDENTES_TG.exists() else {}
+    pend[chave] = video.name
+    PENDENTES_TG.write_text(json.dumps(pend, indent=1), encoding="utf-8")
+
+
+def mover_video(nome: str, pasta: Path) -> bool:
+    """Move o vídeo (e o .txt/.json dele) pra pasta, venha de onde vier. Tira da fila do Telegram."""
+    pasta.mkdir(parents=True, exist_ok=True)
+    stem, moveu = Path(nome).stem, False
+    for origem in (SAIDA, APROVADOS, RECUSADOS):
+        if origem == pasta:
+            continue
+        for ext in (".mp4", ".txt", ".json"):
+            arq = origem / (stem + ext)
+            if arq.exists():
+                arq.replace(pasta / arq.name)
+                moveu = True
+    if PENDENTES_TG.exists():
+        pend = json.loads(PENDENTES_TG.read_text(encoding="utf-8"))
+        resto = {k: v for k, v in pend.items() if Path(v).stem != stem}
+        if resto != pend:
+            PENDENTES_TG.write_text(json.dumps(resto, indent=1), encoding="utf-8")
+    return moveu
+
+
+def modo_aprovar():
+    """Fica ouvindo os botões do Telegram e move os vídeos pra aprovados/ ou recusados/."""
+    tg = telegram_conectar()
+    if not tg:
+        return
+    token, chat = tg
+    APROVADOS.mkdir(exist_ok=True)
+    RECUSADOS.mkdir(exist_ok=True)
+    seg = ler_segredos()
+    offset = int(seg.get("_telegram_offset") or 0)
+    print("Esperando você aprovar no Telegram... (Ctrl+C pra parar)")
+    try:
+        while True:
+            r = _tg(token, "getUpdates", {"offset": offset, "timeout": 30,
+                                          "allowed_updates": ["callback_query"]}, timeout=40)
+            for u in r.get("result", []):
+                offset = u["update_id"] + 1
+                q = u.get("callback_query")
+                if not q or str(q["message"]["chat"]["id"]) != chat:
+                    continue
+                acao, chave = (q.get("data", "") + ":").split(":")[:2]
+                pend = (json.loads(PENDENTES_TG.read_text(encoding="utf-8"))
+                        if PENDENTES_TG.exists() else {})
+                nome = pend.pop(chave, None)
+                if not nome:
+                    _tg(token, "answerCallbackQuery", {"callback_query_id": q["id"],
+                                                       "text": "Esse já foi resolvido."})
+                    continue
+                PENDENTES_TG.write_text(json.dumps(pend, indent=1), encoding="utf-8")
+                mover_video(nome, APROVADOS if acao == "ok" else RECUSADOS)
+                status = "✅ APROVADO" if acao == "ok" else "❌ RECUSADO"
+                _tg(token, "answerCallbackQuery", {"callback_query_id": q["id"], "text": status})
+                _tg(token, "editMessageReplyMarkup", {
+                    "chat_id": chat, "message_id": q["message"]["message_id"],
+                    "reply_markup": {"inline_keyboard": [[{"text": status,
+                                                           "callback_data": "x:x"}]]}})
+                print(f"   {status}: {nome}")
+            seg = ler_segredos()
+            seg["_telegram_offset"] = offset
+            salvar_segredos(seg)
+    except KeyboardInterrupt:
+        print("\nParei. Aprovados em:", APROVADOS)
+
+
+# ---------------------------------------------------------------- painel (site local)
+REDES = ["youtube", "tiktok", "instagram", "facebook"]
+ESTADO_REDES = SAIDA / ".redes.json"
+
+
+def _ler_txt(txt: Path):
+    if not txt.exists():
+        return "", ""
+    t = txt.read_text(encoding="utf-8", errors="ignore")
+    titulo = t.split("TÍTULO:\n", 1)[-1].split("\n\n", 1)[0].strip() if "TÍTULO:" in t else ""
+    leg = t.split("LEGENDA (copiar e colar):\n", 1)[-1] if "LEGENDA" in t else ""
+    leg = re.split(r"\n\n(NARRAÇÃO|FALAS DO JOGO)", leg)[0].strip()
+    return titulo, leg
+
+
+def listar_videos() -> list:
+    estado = json.loads(ESTADO_REDES.read_text(encoding="utf-8")) if ESTADO_REDES.exists() else {}
+    out = []
+    for status, pasta in (("pendente", SAIDA), ("aprovado", APROVADOS), ("recusado", RECUSADOS)):
+        if not pasta.exists():
+            continue
+        for mp4 in sorted(pasta.glob("*.mp4"), key=lambda p: -p.stat().st_mtime):
+            titulo, legenda = _ler_txt(mp4.with_suffix(".txt"))
+            info = (json.loads(mp4.with_suffix(".json").read_text(encoding="utf-8"))
+                    if mp4.with_suffix(".json").exists() else {})
+            out.append({"nome": mp4.name, "status": status,
+                        "url": f"/video/{status}/{urllib.parse.quote(mp4.name)}",
+                        "titulo": titulo, "legenda": legenda, "info": info,
+                        "criado": mp4.stat().st_mtime, "mb": round(mp4.stat().st_size / 1e6, 1),
+                        "redes": {r: estado.get(mp4.stem, {}).get(r, "a_postar") for r in REDES},
+                        "postado_em": {r: estado.get(mp4.stem, {}).get(f"_t_{r}") for r in REDES}})
+    return out
+
+
+def modo_painel(porta: int = 8765):
+    import http.server
+    import webbrowser
+    pastas = {"pendente": SAIDA, "aprovado": APROVADOS, "recusado": RECUSADOS}
+
+    class Painel(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _json(self, dados, codigo=200):
+            corpo = json.dumps(dados, ensure_ascii=False).encode("utf-8")
+            self.send_response(codigo)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(corpo)))
+            self.end_headers()
+            self.wfile.write(corpo)
+
+        def do_GET(self):
+            caminho = urllib.parse.unquote(self.path.split("?")[0])
+            if caminho in ("/", "/index.html"):
+                corpo = (BASE / "painel.html").read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(corpo)))
+                self.end_headers()
+                self.wfile.write(corpo)
+            elif caminho == "/logo.png":
+                logo = sorted((BASE / "perfil").glob("perfil_tresestrelas*.png")) or \
+                    sorted((BASE / "perfil").glob("*.png"))
+                if not logo:
+                    return self._json({"erro": "sem logo"}, 404)
+                corpo = logo[0].read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(corpo)))
+                self.send_header("Cache-Control", "max-age=3600")
+                self.end_headers()
+                self.wfile.write(corpo)
+            elif caminho == "/api/videos":
+                cfg = carregar_config()
+                self._json({"videos": listar_videos(), "arroba": cfg.get("seu_arroba", ""),
+                            "nome": cfg.get("nome_da_pagina", "")})
+            elif caminho.startswith("/video/"):
+                _, _, status, nome = caminho.split("/", 3)
+                arq = pastas.get(status, SAIDA) / Path(nome).name
+                if not arq.exists() or arq.suffix != ".mp4":
+                    return self._json({"erro": "não achei"}, 404)
+                self._enviar_video(arq)
+            else:
+                self._json({"erro": "não achei"}, 404)
+
+        def _enviar_video(self, arq: Path):
+            """Manda o vídeo aceitando Range (sem isso não dá pra avançar o vídeo no navegador)."""
+            tam = arq.stat().st_size
+            ini, fim = 0, tam - 1
+            faixa = re.match(r"bytes=(\d*)-(\d*)", self.headers.get("Range", ""))
+            if faixa:
+                if faixa.group(1):
+                    ini = int(faixa.group(1))
+                    fim = int(faixa.group(2)) if faixa.group(2) else tam - 1
+                elif faixa.group(2):
+                    ini = tam - int(faixa.group(2))
+                self.send_response(206)
+                self.send_header("Content-Range", f"bytes {ini}-{fim}/{tam}")
+            else:
+                self.send_response(200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(fim - ini + 1))
+            self.end_headers()
+            try:
+                with open(arq, "rb") as f:
+                    f.seek(ini)
+                    falta = fim - ini + 1
+                    while falta > 0 and (bloco := f.read(min(1 << 20, falta))):
+                        self.wfile.write(bloco)
+                        falta -= len(bloco)
+            except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+                pass  # o navegador cancelou (normal quando você pula o vídeo)
+
+        def do_POST(self):
+            dados = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            nome = Path(dados.get("nome", "")).name
+            if self.path == "/api/status":
+                destino = {"aprovado": APROVADOS, "recusado": RECUSADOS,
+                           "pendente": SAIDA}.get(dados.get("status"))
+                ok = bool(destino and nome and mover_video(nome, destino))
+                return self._json({"ok": ok})
+            if self.path == "/api/rede":
+                rede, st = dados.get("rede"), dados.get("estado")
+                if rede not in REDES or st not in ("a_postar", "agendado", "postado", "pular"):
+                    return self._json({"ok": False}, 400)
+                estado = (json.loads(ESTADO_REDES.read_text(encoding="utf-8"))
+                          if ESTADO_REDES.exists() else {})
+                v = estado.setdefault(Path(nome).stem, {})
+                v[rede] = st
+                if st == "postado":
+                    v[f"_t_{rede}"] = time.time()  # pros gráficos
+                else:
+                    v.pop(f"_t_{rede}", None)
+                ESTADO_REDES.write_text(json.dumps(estado, indent=1), encoding="utf-8")
+                return self._json({"ok": True})
+            self._json({"erro": "não achei"}, 404)
+
+    SAIDA.mkdir(exist_ok=True)
+    servidor = http.server.ThreadingHTTPServer(("127.0.0.1", porta), Painel)
+    url = f"http://localhost:{porta}"
+    print(f"Painel aberto em {url}  (deixe esta janela aberta; Ctrl+C pra fechar)")
+    webbrowser.open(url)
+    try:
+        servidor.serve_forever()
+    except KeyboardInterrupt:
+        print("\nPainel fechado.")
+
+
+def modo_twitch(cfg, so_listar=False):
+    if "twitch" not in cfg:
+        print('Falta o bloco "twitch" no config.json.')
+        return
+    if not so_listar:
+        try:
+            import yt_dlp  # noqa: F401
+        except ImportError:
+            print("Falta o yt-dlp. Rode:  python -m pip install yt-dlp")
+            return
+    cab = twitch_conectar()
+    if not cab:
+        return
+    tw = cfg["twitch"]
+    clipes = buscar_clipes(cfg, cab)
+    if not clipes:
+        print("Nenhum clipe novo. Aumente 'dias' ou diminua 'min_visualizacoes' no config.")
+        return
+    # no modo Twitch o vídeo é do streamer: config própria pra recorte, voz e títulos
+    base = json.loads(json.dumps(cfg))
+    base["recorte_laterais"] = tw.get("recorte_laterais", 1.0)
+    base.setdefault("narracao", {}).update(tw.get("narracao", {}))
+    base["hashtags"] = tw.get("hashtags", cfg["hashtags"])
+    tg = telegram_conectar(avisar=False) if not so_listar else None
+    for c in clipes:
+        nome, login = c["broadcaster_name"], c["_login"]
+        selo = "" if c["_autorizado"] else "  [sem autorização confirmada]"
+        print(f"\n>> {nome} | {c['view_count']} views | {c['duration']:.0f}s | \"{c['title']}\"{selo}")
+        print(f"   {c['url']}")
+        if so_listar:
+            continue
+        video = baixar_clipe(c)
+        if not video:
+            continue
+        gancho = limpar_titulo(c["title"]) if tw.get("usar_titulo_do_clipe", True) else ""
+        gancho = gancho or random.choice(cfg["ganchos"])
+        cfg_c = dict(base)
+        cfg_c["titulos"] = [t.replace("{streamer}", nome) for t in tw.get("titulos", cfg["titulos"])]
+        cfg_c["hashtags"] = base["hashtags"] + [f"#{re.sub(r'\W', '', login)}"]
+        destino = SAIDA / f"twitch_{re.sub(r'\W', '', login)}_{re.sub(r'[^\w-]', '_', c['id'])}.mp4"
+        print(f"   -> renderizando \"{gancho}\"", flush=True)
+        textos = renderizar(video, 0.0, float(c["duration"]), gancho, destino, cfg_c,
+                            credito=f"CLIPE: twitch.tv/{login}")
+        creditos = (f"🎥 Créditos: {nome} - https://twitch.tv/{login}\n"
+                    f"Clipe original: {c['url']}\n"
+                    f"Clipado por: {c['creator_name']}")
+        escrever_legenda(destino, gancho, cfg_c, textos, creditos)
+        destino.with_suffix(".json").write_text(json.dumps({
+            "streamer": nome, "login": login, "views": c["view_count"], "url": c["url"],
+            "titulo_original": c["title"], "autorizado": c["_autorizado"],
+            "clipe_criado_em": c.get("created_at", "")}, ensure_ascii=False, indent=1),
+            encoding="utf-8")
+        with open(USADOS_TWITCH, "a", encoding="utf-8") as f:
+            f.write(c["id"] + "\n")
+        if tg:
+            aviso = ("" if c["_autorizado"] else
+                     "\n⚠️ Streamer SEM autorização confirmada no config.json")
+            legenda_tg = (f"🎬 {nome} | 👁 {c['view_count']} views | {c['duration']:.0f}s\n"
+                          f"\"{c['title']}\"\n{c['url']}{aviso}")
+            telegram_enviar_pra_aprovar(tg, destino, legenda_tg)
+    if tg:
+        print("\nVídeos enviados pro Telegram. Aprove lá e depois rode:  python fabrica.py --aprovar")
+
+
 def testar_voz(cfg):
     frase = "Fala galera! Isso aqui é GTA 6 no PS5. " + random.choice(cfg["ganchos"])
     wav, d = gerar_fala(frase, cfg)
@@ -689,12 +1223,22 @@ if __name__ == "__main__":
     if "--sem-legenda" in sys.argv:
         cfg.setdefault("legenda", {})["ativar"] = False
     if cfg.get("legenda", {}).get("ativar") and not {"--listar", "--testar-voz",
-                                                      "--curiosidade"} & set(sys.argv):
+                                                      "--curiosidade", "--twitch-listar",
+                                                      "--aprovar", "--testar-telegram",
+                                                      "--painel"} & set(sys.argv):
         if not preparar_whisper(cfg):
             print("   Seguindo SEM legenda (rode de novo com internet pra baixar o whisper).")
             cfg["legenda"]["ativar"] = False
     if "--instalar-legenda" in sys.argv:
         print("Legenda pronta." if cfg.get("legenda", {}).get("ativar") else "Falhou.")
+    elif "--painel" in sys.argv:
+        modo_painel()
+    elif "--aprovar" in sys.argv:
+        modo_aprovar()
+    elif "--testar-telegram" in sys.argv:
+        print("Telegram ok!" if telegram_conectar() else "Telegram não conectado.")
+    elif "--twitch" in sys.argv or "--twitch-listar" in sys.argv:
+        modo_twitch(cfg, so_listar="--twitch-listar" in sys.argv)
     elif "--curiosidade" in sys.argv:
         modo_curiosidade(cfg)
     elif "--testar-voz" in sys.argv:

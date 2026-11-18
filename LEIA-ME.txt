@@ -53,6 +53,19 @@ LEGENDA DAS FALAS DO JOGO
    - Sem internet na 1ª vez, os vídeos saem sem legenda e ele avisa.
    python fabrica.py --sem-legenda   gera sem legenda
 
+CLIPES DA TWITCH  (rodar_twitch.bat  ou  python fabrica.py --twitch)
+   - Pega os clipes de GTA mais vistos dos últimos dias dos streamers que
+     estão em config.json > twitch > streamers com "autorizado": true.
+     Só entra quem LIBEROU. Guarde o print da autorização de cada um.
+   - Na 1ª vez: crie um app grátis em https://dev.twitch.tv/console/apps
+     (OAuth Redirect URL: http://localhost, Categoria: Other) e cole o
+     Client ID e o Secret no arquivo segredos.json (ele é criado sozinho
+     na 1ª execução e NÃO vai pro GitHub).
+   - Cada vídeo sai com "CLIPE: twitch.tv/fulano" na tela, e o .txt traz
+     os créditos (canal, link do clipe original e quem clipou).
+   - Clipe já usado não repete (lista em saida\.clipes_usados.txt).
+   python fabrica.py --twitch-listar   só mostra quais clipes pegaria
+
 AJUSTES (config.json)
    seu_arroba               seu @ que aparece embaixo do vídeo
    max_cortes_por_video     quantos cortes tirar de cada gravação

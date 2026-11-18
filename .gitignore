@@ -8,3 +8,6 @@ entrada/*
 saida/*
 !entrada/.gitkeep
 !saida/.gitkeep
+# chaves da Twitch (NUNCA subir pro GitHub) e clipes baixados
+segredos.json
+clipes/
