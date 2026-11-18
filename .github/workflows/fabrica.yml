@@ -81,6 +81,18 @@ jobs:
           echo "===== YOUTUBE =====" >> rodada.log
           python -u fabrica.py --youtube --sem-legenda 2>&1 | tee -a rodada.log || true
 
+      # os vídeos ficam 7 dias pra baixar: Actions > a rodada > "Artifacts" > videos
+      - name: Guardar os vídeos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos
+          path: |
+            saida/*.mp4
+            saida/*.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
       # resumo da rodada no seu Telegram (o registro do GitHub só abre logado)
       - name: Resumo no Telegram
         if: always()
