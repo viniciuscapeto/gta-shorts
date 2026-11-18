@@ -1022,6 +1022,47 @@ def _tg_marcar(token: str, chat: str, q: dict, aprovado: bool) -> str:
     return status
 
 
+def baixar_aprovado_da_nuvem(token: str, msg: dict, cfg: dict):
+    """Vídeo feito na nuvem e aprovado no Telegram: baixa pro saida/aprovados com a legenda."""
+    video = msg.get("video") or msg.get("document")
+    if not video:
+        return None
+    APROVADOS.mkdir(parents=True, exist_ok=True)
+    destino = APROVADOS / f"nuvem_{msg['message_id']}.mp4"
+    if destino.exists():
+        return destino
+    if (video.get("file_size") or 0) > 20 * 1024 * 1024:
+        print("   [vídeo com mais de 20 MB: o Telegram não deixa o bot baixar; salve pelo celular]")
+        return None
+    r = _tg(token, "getFile", {"file_id": video["file_id"]})
+    if not r.get("ok"):
+        print(f"   [não consegui baixar do Telegram: {r.get('description')}]")
+        return None
+    with urllib.request.urlopen(f"https://api.telegram.org/file/bot{token}/{r['result']['file_path']}",
+                                timeout=300) as resp:
+        destino.write_bytes(resp.read())
+    # a legenda vem da própria mensagem: "🎬 Nome | 👁 views | ...", "título", link
+    cap = msg.get("caption") or ""
+    linhas = [l.strip() for l in cap.splitlines() if l.strip()]
+    nome = linhas[0].replace("🎬", "").split("|")[0].strip() if linhas else ""
+    titulo = next((l.strip('"') for l in linhas[1:] if l.startswith('"')), "") or nome
+    link = next((l for l in linhas if l.startswith("http")), "")
+    login = re.sub(r"\W", "", nome.lower())
+    canal = f"https://twitch.tv/{login}" if "twitch" in link or "clips" in link else link
+    tags = " ".join(cfg.get("twitch", {}).get("hashtags", cfg.get("hashtags", [])) + ([f"#{login}"] if login else []))
+    arroba = cfg.get("seu_arroba", "")
+    legenda = (f"{titulo} 😳\n\n⭐⭐⭐ Segue a {arroba} pra ver os melhores momentos de GTA 6 todo dia!\n"
+               f"💬 Comenta o que você achou\n\n🎥 Créditos: {nome} - {canal}\n"
+               f"Clipe original: {link}\n\n{tags}")
+    destino.with_suffix(".txt").write_text(
+        f"TÍTULO:\n{titulo}\n\nLEGENDA (copiar e colar):\n{legenda}\n", encoding="utf-8")
+    destino.with_suffix(".json").write_text(json.dumps(
+        {"plataforma": "twitch", "streamer": nome, "login": login, "canal_url": canal, "url": link,
+         "titulo_original": titulo, "autorizado": False, "da_nuvem": True}, ensure_ascii=False), encoding="utf-8")
+    print(f"   ⬇ baixado pro painel: {destino.name} ({nome})")
+    return destino
+
+
 def telegram_respostas_nuvem():
     """Na nuvem: marca no Telegram os vídeos que você aprovou/recusou desde a última rodada."""
     tg = telegram_conectar(avisar=False)
@@ -1035,8 +1076,8 @@ def telegram_respostas_nuvem():
     for u in r.get("result", []):
         q = u.get("callback_query")
         dado = (q or {}).get("data", "")
-        if q and dado.startswith(("ok:", "no:")):
-            break  # clique de vídeo feito no PC: deixa pro painel (não confirma no Telegram)
+        if q and dado.startswith(("ok:", "no:", "x:")):
+            break  # clique pro painel do PC (vídeo local ou "baixar de novo"): deixa pra ele
         offset = u["update_id"] + 1
         if q and str(q["message"]["chat"]["id"]) == chat and dado[:3] in ("nok", "nno"):
             _tg_marcar(token, chat, q, dado.startswith("nok"))
@@ -1086,8 +1127,20 @@ def modo_aprovar():
                 if not q or str(q["message"]["chat"]["id"]) != chat:
                     continue
                 acao, chave = (q.get("data", "") + ":").split(":")[:2]
-                if acao in ("nok", "nno"):  # vídeo que veio da nuvem: só marca a decisão
-                    print(f"   {_tg_marcar(token, chat, q, acao == 'nok')} (vídeo da nuvem)")
+                # vídeo que veio da nuvem: marca e, se aprovado, baixa pro painel.
+                # "x" = tocou de novo no botão "✅ APROVADO" (recupera um aprovado antigo)
+                if acao in ("nok", "nno") or (acao == "x" and "APROVADO" in json.dumps(
+                        q["message"].get("reply_markup", {}), ensure_ascii=False)):
+                    if acao != "x":
+                        print(f"   {_tg_marcar(token, chat, q, acao == 'nok')} (vídeo da nuvem)")
+                    else:
+                        _tg(token, "answerCallbackQuery", {"callback_query_id": q["id"],
+                                                           "text": "Baixando pro painel..."})
+                    if acao in ("nok", "x"):
+                        try:
+                            baixar_aprovado_da_nuvem(token, q["message"], carregar_config())
+                        except Exception as e:  # noqa: BLE001
+                            print(f"   [erro ao baixar da nuvem: {e}]")
                     continue
                 pend = (json.loads(PENDENTES_TG.read_text(encoding="utf-8"))
                         if PENDENTES_TG.exists() else {})
