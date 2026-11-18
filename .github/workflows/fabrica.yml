@@ -1,0 +1,82 @@
+# Fábrica na nuvem: roda no GitHub (fora da rede da empresa), busca os clipes virais,
+# edita e manda cada vídeo pro seu Telegram com os botões Aprovar/Recusar.
+# Rodar agora pelo celular: GitHub > Actions > "Fábrica na nuvem" > Run workflow.
+name: Fábrica na nuvem
+
+on:
+  schedule:
+    - cron: "17 12,16,20,23 * * *"   # 9h17, 13h17, 17h17 e 20h17 (horário de Brasília)
+  workflow_dispatch:
+    inputs:
+      fonte:
+        description: "De onde buscar"
+        type: choice
+        options: [twitch, youtube, ambos]
+        default: ambos
+
+concurrency:
+  group: fabrica
+  cancel-in-progress: false
+
+jobs:
+  fabrica:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FABRICA_NUVEM: "1"
+      TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+      TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar
+        run: |
+          python -m pip install -q -U numpy imageio-ffmpeg edge-tts "yt-dlp[default]" deno
+          echo "ttf-mscorefonts-installer msttcorefonts/accept-mscorefonts-eula select true" | sudo debconf-set-selections
+          sudo apt-get install -y -q ttf-mscorefonts-installer fonts-dejavu-core > /dev/null || true
+          F=/usr/share/fonts/truetype/msttcorefonts/Arial_Black.ttf
+          [ -f "$F" ] || F=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+          echo "FABRICA_FONTE=$F" >> "$GITHUB_ENV"
+
+      # o que já foi usado fica guardado entre uma rodada e outra (pra não repetir clipe)
+      - name: Lembrar o que já foi feito
+        uses: actions/cache@v4
+        with:
+          path: |
+            saida/.clipes_usados.txt
+            saida/.youtube_usados.txt
+            saida/.tg_offset
+          key: estado-${{ github.run_id }}
+          restore-keys: estado-
+
+      - name: Chaves
+        run: |
+          python - <<'EOF'
+          import json, os
+          json.dump({"twitch_client_id": os.environ["TWITCH_CLIENT_ID"],
+                     "twitch_client_secret": os.environ["TWITCH_CLIENT_SECRET"],
+                     "telegram_token": os.environ["TELEGRAM_TOKEN"],
+                     "telegram_chat_id": os.environ["TELEGRAM_CHAT_ID"]},
+                    open("segredos.json", "w"))
+          EOF
+
+      - name: Marcar o que você aprovou no Telegram
+        run: python fabrica.py --telegram-respostas || true
+
+      - name: Twitch
+        if: github.event_name == 'schedule' || inputs.fonte != 'youtube'
+        run: python fabrica.py --twitch --sem-legenda || true
+
+      - name: YouTube
+        if: github.event_name == 'schedule' || inputs.fonte != 'twitch'
+        run: python fabrica.py --youtube --sem-legenda || true
+
+      - name: Apagar as chaves
+        if: always()
+        run: rm -f segredos.json

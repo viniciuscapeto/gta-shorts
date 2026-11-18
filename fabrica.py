@@ -58,7 +58,11 @@ JANELA = 0.5       # segundos por bloco de análise
 
 def carregar_config():
     with open(BASE / "config.json", encoding="utf-8") as f:
-        return json.load(f)
+        cfg = json.load(f)
+    # na nuvem (Linux) não existe C:/Windows/Fonts: o robô do GitHub informa outra fonte
+    if os.environ.get("FABRICA_FONTE"):
+        cfg["fonte"] = os.environ["FABRICA_FONTE"]
+    return cfg
 
 
 # ---------------------------------------------------------------- análise
@@ -921,14 +925,19 @@ def telegram_conectar(avisar: bool = True):
     return token, chat
 
 
+# rodando no GitHub Actions: não tem pasta pra mover; os botões só marcam a decisão
+NUVEM = bool(os.environ.get("FABRICA_NUVEM"))
+
+
 def telegram_enviar_pra_aprovar(tg, video: Path, legenda: str):
     token, chat = tg
     if video.stat().st_size > 49 * 1024 * 1024:
         print("   [vídeo passou de 50 MB, o bot do Telegram não aceita; aprove pela pasta]")
         return
     chave = hashlib.md5(video.name.encode("utf-8")).hexdigest()[:10]
-    botoes = {"inline_keyboard": [[{"text": "✅ Aprovar", "callback_data": f"ok:{chave}"},
-                                   {"text": "❌ Recusar", "callback_data": f"no:{chave}"}]]}
+    p = "n" if NUVEM else ""
+    botoes = {"inline_keyboard": [[{"text": "✅ Aprovar", "callback_data": f"{p}ok:{chave}"},
+                                   {"text": "❌ Recusar", "callback_data": f"{p}no:{chave}"}]]}
     print("   -> enviando pro Telegram ...", end="", flush=True)
     r = _tg(token, "sendVideo", {"chat_id": chat, "caption": legenda[:1000],
                                  "supports_streaming": "true",
@@ -938,9 +947,49 @@ def telegram_enviar_pra_aprovar(tg, video: Path, legenda: str):
         print(f" falhou: {r.get('description')}")
         return
     print(" ok")
-    pend = json.loads(PENDENTES_TG.read_text(encoding="utf-8")) if PENDENTES_TG.exists() else {}
-    pend[chave] = video.name
-    PENDENTES_TG.write_text(json.dumps(pend, indent=1), encoding="utf-8")
+    # logo abaixo, a legenda pronta: no Telegram, tocar no bloco copia o texto inteiro
+    _, texto = _ler_txt(video.with_suffix(".txt"))
+    if texto:
+        seguro = texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        _tg(token, "sendMessage", {"chat_id": chat, "parse_mode": "HTML",
+                                   "reply_to_message_id": r["result"]["message_id"],
+                                   "text": f"📋 <b>Legenda pronta</b> (toque pra copiar):\n<pre>{seguro[:3800]}</pre>"})
+    if not NUVEM:
+        pend = json.loads(PENDENTES_TG.read_text(encoding="utf-8")) if PENDENTES_TG.exists() else {}
+        pend[chave] = video.name
+        PENDENTES_TG.write_text(json.dumps(pend, indent=1), encoding="utf-8")
+
+
+def _tg_marcar(token: str, chat: str, q: dict, aprovado: bool) -> str:
+    status = "✅ APROVADO" if aprovado else "❌ RECUSADO"
+    _tg(token, "answerCallbackQuery", {"callback_query_id": q["id"], "text": status})
+    _tg(token, "editMessageReplyMarkup", {
+        "chat_id": chat, "message_id": q["message"]["message_id"],
+        "reply_markup": {"inline_keyboard": [[{"text": status, "callback_data": "x:x"}]]}})
+    return status
+
+
+def telegram_respostas_nuvem():
+    """Na nuvem: marca no Telegram os vídeos que você aprovou/recusou desde a última rodada."""
+    tg = telegram_conectar(avisar=False)
+    if not tg:
+        return
+    token, chat = tg
+    arq = SAIDA / ".tg_offset"
+    offset = int(arq.read_text().strip() or 0) if arq.exists() else 0
+    r = _tg(token, "getUpdates", {"offset": offset, "timeout": 0, "allowed_updates": ["callback_query"]})
+    n = 0
+    for u in r.get("result", []):
+        q = u.get("callback_query")
+        dado = (q or {}).get("data", "")
+        if q and dado.startswith(("ok:", "no:")):
+            break  # clique de vídeo feito no PC: deixa pro painel (não confirma no Telegram)
+        offset = u["update_id"] + 1
+        if q and str(q["message"]["chat"]["id"]) == chat and dado[:3] in ("nok", "nno"):
+            _tg_marcar(token, chat, q, dado.startswith("nok"))
+            n += 1
+    arq.write_text(str(offset))
+    print(f"Telegram: {n} decisão(ões) marcadas")
 
 
 def mover_video(nome: str, pasta: Path) -> bool:
@@ -984,6 +1033,9 @@ def modo_aprovar():
                 if not q or str(q["message"]["chat"]["id"]) != chat:
                     continue
                 acao, chave = (q.get("data", "") + ":").split(":")[:2]
+                if acao in ("nok", "nno"):  # vídeo que veio da nuvem: só marca a decisão
+                    print(f"   {_tg_marcar(token, chat, q, acao == 'nok')} (vídeo da nuvem)")
+                    continue
                 pend = (json.loads(PENDENTES_TG.read_text(encoding="utf-8"))
                         if PENDENTES_TG.exists() else {})
                 nome = pend.pop(chave, None)
@@ -993,13 +1045,7 @@ def modo_aprovar():
                     continue
                 PENDENTES_TG.write_text(json.dumps(pend, indent=1), encoding="utf-8")
                 mover_video(nome, APROVADOS if acao == "ok" else RECUSADOS)
-                status = "✅ APROVADO" if acao == "ok" else "❌ RECUSADO"
-                _tg(token, "answerCallbackQuery", {"callback_query_id": q["id"], "text": status})
-                _tg(token, "editMessageReplyMarkup", {
-                    "chat_id": chat, "message_id": q["message"]["message_id"],
-                    "reply_markup": {"inline_keyboard": [[{"text": status,
-                                                           "callback_data": "x:x"}]]}})
-                print(f"   {status}: {nome}")
+                print(f"   {_tg_marcar(token, chat, q, acao == 'ok')}: {nome}")
             seg = ler_segredos()
             seg["_telegram_offset"] = offset
             salvar_segredos(seg)
@@ -1333,7 +1379,7 @@ if __name__ == "__main__":
                                                       "--curiosidade", "--twitch-listar",
                                                       "--youtube-listar",
                                                       "--aprovar", "--testar-telegram",
-                                                      "--painel"} & set(sys.argv):
+                                                      "--painel", "--telegram-respostas"} & set(sys.argv):
         if not preparar_whisper(cfg):
             print("   Seguindo SEM legenda (rode de novo com internet pra baixar o whisper).")
             cfg["legenda"]["ativar"] = False
@@ -1341,6 +1387,8 @@ if __name__ == "__main__":
         print("Legenda pronta." if cfg.get("legenda", {}).get("ativar") else "Falhou.")
     elif "--painel" in sys.argv:
         modo_painel()
+    elif "--telegram-respostas" in sys.argv:
+        telegram_respostas_nuvem()
     elif "--aprovar" in sys.argv:
         modo_aprovar()
     elif "--testar-telegram" in sys.argv:
