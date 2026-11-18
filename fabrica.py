@@ -16,6 +16,9 @@ Uso:
     python fabrica.py --twitch      -> baixa os clipes de GTA mais vistos dos streamers
                                        autorizados (config.json > twitch) e edita com crédito
     python fabrica.py --twitch-listar -> só mostra quais clipes pegaria
+    python fabrica.py --youtube     -> acha os vídeos longos de GTA mais vistos do YouTube,
+                                       corta o trecho mais repetido e edita com crédito
+    python fabrica.py --youtube-listar -> só mostra quais trechos pegaria
     python fabrica.py --painel      -> abre o painel no navegador (aprovar + controle por rede)
     python fabrica.py --testar-telegram -> conecta o bot do Telegram (1ª vez)
     python fabrica.py --aprovar     -> fica ouvindo os botões Aprovar/Recusar do Telegram
@@ -1076,33 +1079,225 @@ def modo_twitch(cfg, so_listar=False):
         if not video:
             continue
         gancho = limpar_titulo(c["title"]) if tw.get("usar_titulo_do_clipe", True) else ""
-        gancho = gancho or random.choice(cfg["ganchos"])
         cfg_c = dict(base)
         cfg_c["titulos"] = [t.replace("{streamer}", nome) for t in tw.get("titulos", cfg["titulos"])]
         cfg_c["hashtags"] = base["hashtags"] + [f"#{re.sub(r'\W', '', login)}"]
-        destino = SAIDA / f"twitch_{re.sub(r'\W', '', login)}_{re.sub(r'[^\w-]', '_', c['id'])}.mp4"
-        print(f"   -> renderizando \"{gancho}\"", flush=True)
-        textos = renderizar(video, 0.0, float(c["duration"]), gancho, destino, cfg_c,
-                            credito=f"CLIPE: twitch.tv/{login}")
-        creditos = (f"🎥 Créditos: {nome} - https://twitch.tv/{login}\n"
-                    f"Clipe original: {c['url']}\n"
-                    f"Clipado por: {c['creator_name']}")
-        escrever_legenda(destino, gancho, cfg_c, textos, creditos)
-        destino.with_suffix(".json").write_text(json.dumps({
-            "streamer": nome, "login": login, "views": c["view_count"], "url": c["url"],
-            "titulo_original": c["title"], "autorizado": c["_autorizado"],
-            "clipe_criado_em": c.get("created_at", "")}, ensure_ascii=False, indent=1),
-            encoding="utf-8")
-        with open(USADOS_TWITCH, "a", encoding="utf-8") as f:
-            f.write(c["id"] + "\n")
-        if tg:
-            aviso = ("" if c["_autorizado"] else
-                     "\n⚠️ Streamer SEM autorização confirmada no config.json")
-            legenda_tg = (f"🎬 {nome} | 👁 {c['view_count']} views | {c['duration']:.0f}s\n"
-                          f"\"{c['title']}\"\n{c['url']}{aviso}")
-            telegram_enviar_pra_aprovar(tg, destino, legenda_tg)
+        finalizar_corte(
+            cfg_c, video, 0.0, float(c["duration"]), gancho,
+            SAIDA / f"twitch_{re.sub(r'\W', '', login)}_{re.sub(r'[^\w-]', '_', c['id'])}.mp4",
+            credito=f"CLIPE: twitch.tv/{login}",
+            creditos=(f"🎥 Créditos: {nome} - https://twitch.tv/{login}\n"
+                      f"Clipe original: {c['url']}\nClipado por: {c['creator_name']}"),
+            info={"plataforma": "twitch", "streamer": nome, "login": login,
+                  "canal_url": f"https://twitch.tv/{login}", "views": c["view_count"],
+                  "url": c["url"], "titulo_original": c["title"], "autorizado": c["_autorizado"],
+                  "clipe_criado_em": c.get("created_at", "")},
+            usados=(USADOS_TWITCH, c["id"]), tg=tg,
+            legenda_tg=f"🎬 {nome} | 👁 {c['view_count']} views | {c['duration']:.0f}s\n"
+                       f"\"{c['title']}\"\n{c['url']}")
     if tg:
-        print("\nVídeos enviados pro Telegram. Aprove lá e depois rode:  python fabrica.py --aprovar")
+        print("\nVídeos enviados pro Telegram pra você aprovar.")
+
+
+def finalizar_corte(cfg_c, video: Path, ini: float, fim: float, gancho: str, destino: Path,
+                    credito: str, creditos: str, info: dict, usados, tg=None, legenda_tg=""):
+    """Parte comum de Twitch e YouTube: edita, escreve .txt/.json, marca como usado
+    e manda pro Telegram aprovar."""
+    gancho = gancho or random.choice(cfg_c["ganchos"])
+    print(f"   -> renderizando \"{gancho}\"", flush=True)
+    textos = renderizar(video, ini, fim, gancho, destino, cfg_c, credito=credito)
+    escrever_legenda(destino, gancho, cfg_c, textos, creditos)
+    destino.with_suffix(".json").write_text(json.dumps(info, ensure_ascii=False, indent=1),
+                                            encoding="utf-8")
+    arq, chave = usados
+    with open(arq, "a", encoding="utf-8") as f:
+        f.write(chave + "\n")
+    if tg:
+        aviso = "" if info.get("autorizado") else "\n⚠️ Criador SEM autorização confirmada"
+        telegram_enviar_pra_aprovar(tg, destino, legenda_tg + aviso)
+
+
+# ---------------------------------------------------------------- vídeos virais do YouTube
+USADOS_YOUTUBE = SAIDA / ".youtube_usados.txt"
+# filtro da busca do YouTube: "ordenar por visualizações" + "enviado em" (hoje/semana/mês)
+FILTRO_YT = {1: "CAMSAggC", 7: "CAMSAggD", 30: "CAMSAggE"}
+
+
+def _ytdlp_json(args: list, timeout: int = 120):
+    r = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", *args],
+                       capture_output=True, text=True, encoding="utf-8", errors="ignore",
+                       timeout=timeout)
+    if r.returncode != 0 or not r.stdout.strip():
+        if "CERTIFICATE_VERIFY_FAILED" in (r.stderr or ""):
+            return None, ("a rede está interceptando a conexão com o YouTube "
+                          "(comum em rede de empresa): rode num PC/rede pessoal")
+        erro = (r.stderr or "").strip().splitlines()
+        return None, (erro[-1] if erro else "sem resposta")
+    return json.loads(r.stdout), ""
+
+
+def momentos_virais(heatmap: list, duracao: float, quantos: int, segundos: float) -> list:
+    """Pelos 'momentos mais repetidos' do YouTube, devolve [(inicio, fim, força)]."""
+    pontos = [h for h in heatmap or [] if h.get("start_time", 0) >= max(60, duracao * 0.03)]
+    pontos.sort(key=lambda h: -h.get("value", 0))
+    escolhidos = []
+    for h in pontos:
+        if len(escolhidos) >= quantos or h.get("value", 0) < 0.35:
+            break
+        meio = (h["start_time"] + h["end_time"]) / 2
+        if any(abs(meio - (a + b) / 2) < segundos * 3 for a, b, _ in escolhidos):
+            continue  # muito perto de um corte que já foi escolhido
+        ini = min(max(0.0, meio - segundos * 0.6), max(0.0, duracao - segundos))
+        escolhidos.append((ini, min(duracao, ini + segundos), float(h["value"])))
+    return escolhidos
+
+
+def buscar_youtube(cfg: dict) -> list:
+    """Vídeos longos de GTA mais vistos (busca + canais escolhidos), já com os trechos virais."""
+    from datetime import datetime, timedelta
+    yt = cfg["youtube"]
+    dias = yt.get("dias", 7)
+    filtro = FILTRO_YT[min(FILTRO_YT, key=lambda d: abs(d - dias))]
+    canais = {c["canal"].strip().lower(): c for c in yt.get("canais", []) if c.get("canal")}
+    bloqueados = {c.strip().lower() for c in yt.get("nunca_pegar", [])}
+    candidatos = {}
+    for q in yt.get("buscas", []):
+        url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(q)}&sp={filtro}"
+        d, erro = _ytdlp_json(["--flat-playlist", "--playlist-end", "15", url])
+        if not d:
+            print(f"   [busca \"{q}\" falhou: {erro}]")
+            continue
+        for e in d.get("entries") or []:
+            if e and e.get("id"):
+                candidatos.setdefault(e["id"], "busca")
+        print(f"   busca \"{q}\": {len(d.get('entries') or [])} vídeo(s)")
+    for canal in canais:
+        nome_url = canal if canal.startswith(("http", "@")) else "@" + canal
+        base_url = nome_url if nome_url.startswith("http") else f"https://www.youtube.com/{nome_url}"
+        achou, erros = 0, []
+        for aba in ("streams", "videos"):
+            d, erro = _ytdlp_json(["--flat-playlist", "--playlist-end", "6", f"{base_url}/{aba}"])
+            erros.append(erro)
+            for e in (d or {}).get("entries") or []:
+                if e and e.get("id"):
+                    candidatos.setdefault(e["id"], canal)
+                    achou += 1
+        rede = next((e for e in erros if "rede" in e), "")
+        print(f"   canal {canal}: {achou} vídeo(s) recentes" if achou
+              else f"   [canal {canal}: {rede}]" if rede
+              else f"   [não achei o canal {canal}; confira o @ no config]")
+
+    usados = (set(USADOS_YOUTUBE.read_text(encoding="utf-8").split())
+              if USADOS_YOUTUBE.exists() else set())
+    limite = (datetime.now() - timedelta(days=dias)).strftime("%Y%m%d")
+    escolhidos, por_canal = [], {}
+    print(f"   analisando {len(candidatos)} vídeo(s)...", flush=True)
+    for vid, origem in candidatos.items():
+        info, erro = _ytdlp_json(["--skip-download", f"https://www.youtube.com/watch?v={vid}"])
+        if not info:
+            continue
+        handle = (info.get("uploader_id") or info.get("channel_id") or "").lower()
+        if handle in bloqueados or (info.get("channel") or "").lower() in bloqueados:
+            continue
+        idioma = (info.get("language") or "").lower()
+        if idioma and not idioma.startswith("pt"):
+            continue
+        if (info.get("upload_date") or "99999999") < limite:
+            continue
+        if (info.get("duration") or 0) < yt.get("min_duracao_min", 20) * 60:
+            continue  # curto demais: normalmente já é um corte de outro canal
+        if origem == "busca" and (info.get("view_count") or 0) < yt.get("min_visualizacoes", 0):
+            continue
+        cortes = [m for m in momentos_virais(info.get("heatmap"), info["duration"],
+                                             yt.get("cortes_por_video", 1), yt.get("segundos_por_corte", 45))
+                  if f"{vid}@{int(m[0]) // 30}" not in usados]
+        if not cortes:
+            continue
+        if por_canal.get(handle, 0) >= yt.get("max_por_canal", 2):
+            continue
+        por_canal[handle] = por_canal.get(handle, 0) + 1
+        conf = canais.get(handle) or canais.get((info.get("channel") or "").lower()) or {}
+        info["_autorizado"] = bool(conf.get("autorizado"))
+        info["_cortes"] = cortes
+        escolhidos.append(info)
+    escolhidos.sort(key=lambda i: -(i.get("view_count") or 0))
+    return escolhidos[:yt.get("max_videos", 6)]
+
+
+def baixar_trecho(info: dict, ini: float, fim: float):
+    CLIPES.mkdir(exist_ok=True)
+    destino = CLIPES / f"yt_{info['id']}_{int(ini)}.mp4"
+    if destino.exists():
+        return destino
+    # baixa só o pedaço (com uma folga de 2s de cada lado pra não cortar no meio da fala)
+    r = subprocess.run([sys.executable, "-m", "yt_dlp", "-q", "--no-warnings",
+                        "--ffmpeg-location", FFMPEG,
+                        "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
+                        "--merge-output-format", "mp4",
+                        "--download-sections", f"*{max(0, ini - 2):.0f}-{fim + 2:.0f}",
+                        "--force-keyframes-at-cuts", "-o", str(destino),
+                        f"https://www.youtube.com/watch?v={info['id']}"],
+                       capture_output=True, text=True, encoding="utf-8", errors="ignore")
+    if r.returncode != 0 or not destino.exists():
+        print(f"   [não consegui baixar: {(r.stderr or '').strip()[-200:]}]")
+        return None
+    return destino
+
+
+def modo_youtube(cfg, so_listar=False):
+    if "youtube" not in cfg:
+        print('Falta o bloco "youtube" no config.json.')
+        return
+    try:
+        import yt_dlp  # noqa: F401
+    except ImportError:
+        print("Falta o yt-dlp. Rode:  python -m pip install yt-dlp")
+        return
+    yt = cfg["youtube"]
+    print("Procurando os vídeos de GTA mais vistos no YouTube...")
+    videos = buscar_youtube(cfg)
+    if not videos:
+        print("Nenhum vídeo novo com momento viral. Aumente 'dias' ou diminua o mínimo de views.")
+        return
+    base = json.loads(json.dumps(cfg))
+    base["recorte_laterais"] = yt.get("recorte_laterais", 1.0)
+    base.setdefault("narracao", {}).update(yt.get("narracao", {"falar_gancho_no_inicio": False}))
+    base["hashtags"] = yt.get("hashtags", cfg["hashtags"])
+    tg = telegram_conectar(avisar=False) if not so_listar else None
+    for info in videos:
+        canal = info.get("channel") or info.get("uploader") or "?"
+        handle = info.get("uploader_id") or ""
+        canal_url = info.get("channel_url") or info.get("uploader_url") or ""
+        selo = "" if info["_autorizado"] else "  [sem autorização confirmada]"
+        print(f"\n>> {canal} | {info.get('view_count', 0)} views | \"{info.get('title', '')}\"{selo}")
+        for ini, fim, forca in info["_cortes"]:
+            link = f"https://youtu.be/{info['id']}?t={int(ini)}"
+            print(f"   momento viral {hms(ini)} -> {hms(fim)} (força {forca:.2f})  {link}")
+            if so_listar:
+                continue
+            video = baixar_trecho(info, ini, fim)
+            if not video:
+                continue
+            cfg_c = dict(base)
+            cfg_c["titulos"] = [t.replace("{streamer}", canal)
+                                for t in yt.get("titulos", cfg["twitch"].get("titulos", cfg["titulos"]))]
+            tag = re.sub(r"\W", "", handle.lstrip("@").lower())
+            cfg_c["hashtags"] = base["hashtags"] + ([f"#{tag}"] if tag else [])
+            # o trecho baixado já começa ~2s antes do momento
+            folga = min(2.0, ini)
+            finalizar_corte(
+                cfg_c, video, folga, folga + (fim - ini),
+                limpar_titulo(info.get("title", "")) if yt.get("usar_titulo_do_video", True) else "",
+                SAIDA / f"youtube_{tag or 'canal'}_{info['id']}_{int(ini)}.mp4",
+                credito=f"VÍDEO: youtube.com/{handle}" if handle.startswith("@") else f"VÍDEO: {canal}",
+                creditos=(f"🎥 Créditos: {canal} - {canal_url}\nVídeo original: {link}"),
+                info={"plataforma": "youtube", "streamer": canal, "login": handle,
+                      "canal_url": canal_url, "views": info.get("view_count", 0), "url": link,
+                      "titulo_original": info.get("title", ""), "autorizado": info["_autorizado"],
+                      "momento": [ini, fim]},
+                usados=(USADOS_YOUTUBE, f"{info['id']}@{int(ini) // 30}"), tg=tg,
+                legenda_tg=f"🎬 {canal} | 👁 {info.get('view_count', 0)} views | trecho {hms(ini)}\n"
+                           f"\"{info.get('title', '')}\"\n{link}")
 
 
 def testar_voz(cfg):
@@ -1123,6 +1318,7 @@ if __name__ == "__main__":
         cfg.setdefault("legenda", {})["ativar"] = False
     if cfg.get("legenda", {}).get("ativar") and not {"--listar", "--testar-voz",
                                                       "--curiosidade", "--twitch-listar",
+                                                      "--youtube-listar",
                                                       "--aprovar", "--testar-telegram",
                                                       "--painel"} & set(sys.argv):
         if not preparar_whisper(cfg):
@@ -1136,6 +1332,8 @@ if __name__ == "__main__":
         modo_aprovar()
     elif "--testar-telegram" in sys.argv:
         print("Telegram ok!" if telegram_conectar() else "Telegram não conectado.")
+    elif "--youtube" in sys.argv or "--youtube-listar" in sys.argv:
+        modo_youtube(cfg, so_listar="--youtube-listar" in sys.argv)
     elif "--twitch" in sys.argv or "--twitch-listar" in sys.argv:
         modo_twitch(cfg, so_listar="--twitch-listar" in sys.argv)
     elif "--curiosidade" in sys.argv:

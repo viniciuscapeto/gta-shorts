@@ -88,6 +88,24 @@
     "hashtags": ["#gta", "#gtarp", "#twitch", "#clips", "#fyp", "#viral", "#shorts"]
   },
 
+  "youtube": {
+    "buscas": ["gta rp", "gta 5 rp", "gta rp live", "gta 6"],
+    "canais": [
+      {"canal": "@paulinholoko", "autorizado": false, "como_autorizou": "CONFIRMAR o @ e a autorização"}
+    ],
+    "nunca_pegar": [],
+    "dias": 7,
+    "min_visualizacoes": 30000,
+    "min_duracao_min": 20,
+    "max_videos": 6,
+    "max_por_canal": 2,
+    "cortes_por_video": 1,
+    "segundos_por_corte": 45,
+    "usar_titulo_do_video": true,
+    "recorte_laterais": 1.0,
+    "hashtags": ["#gta", "#gtarp", "#cortes", "#fyp", "#viral", "#shorts"]
+  },
+
   "curiosidades": [
     {
       "gancho": "Você sabia que o GTA 5 fez um bilhão de dólares em três dias?",

@@ -86,6 +86,11 @@ label.check input { width: auto; margin: 0; accent-color: var(--rosa); }
 .hero { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
         border-left: 5px solid var(--rosa); }
 .hero.rodando { border-left-color: var(--verde); }
+.fontes { display: flex; flex-direction: column; gap: 8px; min-width: min(100%, 470px); }
+.fonte { display: flex; align-items: center; gap: 8px; background: var(--card2); border: 1px solid var(--borda);
+         border-radius: 11px; padding: 8px 8px 8px 14px; }
+.fonte-nome { flex: 1; font-weight: 700; }
+.fonte-nome small { display: block; color: var(--suave); font-weight: 400; font-size: 12.5px; }
 .numeros { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
 .numero { text-align: center; padding: 14px; }
 .numero span { display: block; font-size: 30px; font-weight: 700; }

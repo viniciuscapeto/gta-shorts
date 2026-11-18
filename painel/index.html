@@ -41,11 +41,19 @@
     <div class="hero card" id="hero">
       <div>
         <h2 id="hero-titulo">Vamos colocar a fábrica pra trabalhar</h2>
-        <p class="suave" id="hero-sub">Ela busca os clipes de GTA mais vistos da Twitch, edita e deixa pra você aprovar.</p>
+        <p class="suave" id="hero-sub">Ela busca os clipes de GTA mais vistos, edita e deixa pra você aprovar.</p>
       </div>
-      <div class="linha">
-        <button class="btn fantasma" data-tarefa="listar">Só ver quais pegaria</button>
-        <button class="btn grande" data-tarefa="buscar" id="btn-buscar">Buscar clipes virais agora</button>
+      <div class="fontes">
+        <div class="fonte">
+          <span class="fonte-nome">Twitch <small>clipes mais vistos</small></span>
+          <button class="btn fantasma peq" data-tarefa="listar">Só ver</button>
+          <button class="btn" data-tarefa="buscar">Buscar na Twitch</button>
+        </div>
+        <div class="fonte">
+          <span class="fonte-nome">YouTube <small>trecho mais repetido das lives</small></span>
+          <button class="btn fantasma peq" data-tarefa="youtube_listar">Só ver</button>
+          <button class="btn" data-tarefa="youtube">Buscar no YouTube</button>
+        </div>
       </div>
     </div>
 
@@ -86,7 +94,7 @@
           </li>
           <li id="passo-buscar">
             <div class="passo-cab"><b>4. Buscar e aprovar</b><span class="ok-ico"></span></div>
-            <p class="suave">Clique em <b>Buscar clipes virais agora</b>. Os vídeos prontos aparecem na aba <b>Aprovar</b>.</p>
+            <p class="suave">Clique em <b>Buscar na Twitch</b> ou <b>Buscar no YouTube</b>. Os vídeos prontos aparecem na aba <b>Aprovar</b>.</p>
           </li>
         </ol>
       </div>
@@ -192,6 +200,33 @@
         </div>
         <label>Mínimo de views<input type="number" name="twitch.min_visualizacoes" min="0"></label>
         <label>Nunca pegar destes canais (separados por vírgula)<input name="twitch.nunca_pegar"></label>
+      </div>
+
+      <div class="card largo">
+        <div class="cab-card"><h3>YouTube</h3><button type="button" class="btn fantasma peq" id="btn-add-canal">+ Adicionar canal</button></div>
+        <p class="suave">A fábrica pega vídeos longos (lives) de GTA e corta o <b>trecho mais repetido</b>, aquele pico do gráfico de replays do YouTube.</p>
+        <div class="grade2">
+          <div>
+            <label>Buscar por (separado por vírgula)<input name="youtube.buscas"></label>
+            <div class="duplo">
+              <label>Dos últimos (dias)<input type="number" name="youtube.dias" min="1" max="30"></label>
+              <label>Mínimo de views<input type="number" name="youtube.min_visualizacoes" min="0"></label>
+            </div>
+            <div class="duplo">
+              <label>Vídeo com pelo menos (min)<input type="number" name="youtube.min_duracao_min" min="1"></label>
+              <label>Vídeos por busca<input type="number" name="youtube.max_videos" min="1" max="30"></label>
+            </div>
+            <div class="duplo">
+              <label>Cortes por vídeo<input type="number" name="youtube.cortes_por_video" min="1" max="5"></label>
+              <label>Segundos por corte<input type="number" name="youtube.segundos_por_corte" min="15" max="170"></label>
+            </div>
+            <label>Nunca pegar destes canais (separados por vírgula)<input name="youtube.nunca_pegar"></label>
+          </div>
+          <div>
+            <p class="suave" style="margin-top:0">Canais pra acompanhar sempre (o @ do canal, ex.: <code>@paulinholoko</code>):</p>
+            <div id="canais"></div>
+          </div>
+        </div>
       </div>
 
       <div class="largo direita"><button class="btn grande" type="submit">Salvar configurações</button></div>

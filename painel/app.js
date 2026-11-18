@@ -35,7 +35,7 @@ async function api(rota, dados) {
 function irPara(nova) {
   if (!document.querySelector(`.aba[data-aba="${nova}"]`)) nova = "inicio";
   aba = nova; try { localStorage.setItem("aba", aba); } catch (e) {}
-  history.replaceState(null, "", "#" + aba);
+  history.replaceState(null, "", "#/" + aba);  // "#/" pra o navegador não rolar até a seção
   document.querySelectorAll(".aba").forEach((b) => b.classList.toggle("ativa", b.dataset.aba === aba));
   const secao = REDES[aba] ? "rede" : aba;
   document.querySelectorAll(".painel").forEach((p) => p.classList.toggle("ativo", p.id === secao));
@@ -137,7 +137,7 @@ function desenharVideos(forcar = false) {
   if (aba === "aprovar") {
     const l = videos.filter((v) => v.status === "pendente");
     $("lista-aprovar").innerHTML = l.map(cardAprovar).join("") ||
-      `<div class="vazio">Nada esperando aprovação. Clique em <b>Buscar clipes virais agora</b> na aba Início.</div>`;
+      `<div class="vazio">Nada esperando aprovação. Na aba Início, clique em <b>Buscar na Twitch</b> ou <b>Buscar no YouTube</b>.</div>`;
   } else if (aba === "recusados") {
     const l = videos.filter((v) => v.status === "recusado");
     $("lista-recusados").innerHTML = l.map(cardRecusado).join("") || `<div class="vazio">Nenhum vídeo recusado.</div>`;
@@ -154,9 +154,11 @@ function desenharVideos(forcar = false) {
 
 function metaHTML(v) {
   const i = v.info || {}, p = [];
-  if (i.streamer) p.push(`🎮 <a href="https://twitch.tv/${esc(i.login)}" target="_blank" rel="noopener">${esc(i.streamer)}</a>`);
+  const yt = i.plataforma === "youtube";
+  const canal = i.canal_url || (i.login ? `https://twitch.tv/${i.login}` : "");
+  if (i.streamer) p.push(`${yt ? "▶️ YouTube" : "🎮 Twitch"} · <a href="${esc(canal)}" target="_blank" rel="noopener">${esc(i.streamer)}</a>`);
   if (i.views) p.push(`👁 ${num(i.views)} views`);
-  if (i.url) p.push(`<a href="${esc(i.url)}" target="_blank" rel="noopener">clipe original</a>`);
+  if (i.url) p.push(`<a href="${esc(i.url)}" target="_blank" rel="noopener">${yt ? "vídeo original" : "clipe original"}</a>`);
   p.push(`${v.mb} MB`);
   return `<div class="meta">${p.join("<span>·</span>")}</div>` +
     (i.streamer && i.autorizado === false ? `<div class="alerta">⚠️ Streamer sem autorização confirmada. Aprove só se tiver certeza.</div>` : "");
@@ -330,20 +332,29 @@ async function carregarConfig() {
     else if (Array.isArray(v)) el.value = v.join(el.name === "twitch.hashtags" ? " " : ", ");
     else el.value = v ?? "";
   }
-  $("streamers").innerHTML = "";
-  (cfgAtual["twitch.streamers"] || []).forEach(linhaStreamer);
+  $("streamers").innerHTML = $("canais").innerHTML = "";
+  (cfgAtual["twitch.streamers"] || []).forEach((s) => linhaCriador("streamers", "login", s));
+  (cfgAtual["youtube.canais"] || []).forEach((s) => linhaCriador("canais", "canal", s));
 }
-function linhaStreamer(s = {}) {
+// uma linha da lista de criadores: Twitch guarda em "login", YouTube em "canal"
+function linhaCriador(lista, chave, s = {}) {
   const d = document.createElement("div");
   d.className = "streamer";
-  d.innerHTML = `<input class="st-login" placeholder="login na Twitch (ex.: gaules)" value="${esc(s.login || "")}">
+  const dica = chave === "login" ? "login na Twitch (ex.: gaules)" : "@ do canal (ex.: @paulinholoko)";
+  d.innerHTML = `<input class="st-login" placeholder="${dica}" value="${esc(s[chave] || "")}">
     <label class="check"><input type="checkbox" class="st-aut" ${s.autorizado ? "checked" : ""}> liberou</label>
     <button type="button" class="btn fantasma peq st-tirar" title="Tirar da lista">✕</button>`;
   d.querySelector(".st-tirar").onclick = () => d.remove();
   d._extra = s;
-  $("streamers").appendChild(d);
+  $(lista).appendChild(d);
 }
-$("btn-add-streamer").onclick = () => linhaStreamer();
+function lerCriadores(lista, chave, limpar) {
+  return [...$(lista).querySelectorAll(".streamer")].map((d) => ({
+    ...d._extra, [chave]: limpar(d.querySelector(".st-login").value.trim()),
+    autorizado: d.querySelector(".st-aut").checked })).filter((s) => s[chave]);
+}
+$("btn-add-streamer").onclick = () => linhaCriador("streamers", "login");
+$("btn-add-canal").onclick = () => linhaCriador("canais", "canal");
 $("form-config").onsubmit = async (ev) => {
   ev.preventDefault();
   const f = ev.target, dados = {};
@@ -352,12 +363,18 @@ $("form-config").onsubmit = async (ev) => {
     if (el.type === "checkbox") dados[el.name] = el.checked;
     else if (el.type === "number") dados[el.name] = el.value === "" ? 0 : Number(el.value);
     else if (el.name === "twitch.hashtags") dados[el.name] = el.value.split(/\s+/).filter(Boolean);
-    else if (el.name === "twitch.nunca_pegar") dados[el.name] = el.value.split(",").map((s) => s.trim()).filter(Boolean);
+    else if (["twitch.nunca_pegar", "youtube.nunca_pegar", "youtube.buscas"].includes(el.name))
+      dados[el.name] = el.value.split(",").map((s) => s.trim()).filter(Boolean);
     else dados[el.name] = el.value.trim();
   }
-  dados["twitch.streamers"] = [...document.querySelectorAll(".streamer")].map((d) => ({
-    ...d._extra, login: d.querySelector(".st-login").value.trim().toLowerCase().replace(/^.*twitch\.tv\//, "").replace(/\/.*$/, ""),
-    autorizado: d.querySelector(".st-aut").checked })).filter((s) => s.login);
+  dados["twitch.streamers"] = lerCriadores("streamers", "login",
+    (v) => v.toLowerCase().replace(/^.*twitch\.tv\//, "").replace(/\/.*$/, ""));
+  // aceita "@canal", "canal" ou o link youtube.com/@canal
+  dados["youtube.canais"] = lerCriadores("canais", "canal", (v) => {
+    const m = v.match(/youtube\.com\/(@[\w.-]+)/i);
+    v = m ? m[1] : v.replace(/\/.*$/, "");
+    return v && !v.startsWith("@") ? "@" + v : v;
+  });
   try { await api("/api/config", dados); aviso("Configurações salvas"); atualizarEstado(); }
   catch (e) { aviso(e.message, true); }
 };
@@ -427,7 +444,7 @@ $("btn-telegram").onclick = async () => {
 $("btn-pasta").onclick = () => api("/api/abrir-pasta", {}).catch((e) => aviso(e.message, true));
 
 /* ---------------- começo ---------------- */
-irPara(location.hash.slice(1) || aba);
+irPara(location.hash.replace(/^#\/?/, "") || aba);
 atualizarEstado();
 carregarVideos();
 setInterval(carregarVideos, 10000);
