@@ -58,11 +58,21 @@
       {"login": "alanzoka", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
       {"login": "gaules", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
       {"login": "bistecone", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
-      {"login": "cellbit", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"}
+      {"login": "cellbit", "autorizado": false, "como_autorizou": "CONFIRMAR antes de mudar pra true"},
+      {"login": "paulinholoko", "autorizado": false},
+      {"login": "casimito", "autorizado": false},
+      {"login": "loud_coringa", "autorizado": false},
+      {"login": "piuzinho", "autorizado": false},
+      {"login": "jukes", "autorizado": false},
+      {"login": "liminhag0d", "autorizado": false},
+      {"login": "gordox", "autorizado": false},
+      {"login": "mount", "autorizado": false},
+      {"login": "baiano", "autorizado": false},
+      {"login": "tck10", "autorizado": false}
     ],
     "descobrir": {
       "ativar": true,
-      "idiomas": [],
+      "idiomas": ["pt"],
       "todos_os_jogos": false,
       "top_jogos": 15,
       "dias": 7,
@@ -73,15 +83,16 @@
     },
     "ao_vivo": {
       "ativar": true,
-      "idiomas": [],
-      "min_espectadores": 1000,
+      "grupos": [
+        {"nome": "BR", "idiomas": ["pt"], "min_espectadores": 300, "max_lives": 20}
+      ],
       "horas": 8,
-      "max_lives": 15,
       "clipes_por_live": 2,
       "min_visualizacoes": 20
     },
     "nunca_pegar": [],
     "jogos": ["Grand Theft Auto VI"],
+    "bloquear_no_titulo": ["gta 5", "gta v ", "gtav", "gta5", "gta rp", " rp ", "roleplay", "fivem"],
     "streamers_qualquer_jogo": false,
     "so_autorizados": false,
     "dias": 14,
@@ -102,6 +113,7 @@
   },
 
   "youtube": {
+    "ativar": false,
     "buscas": ["gta 6", "gta 6 gameplay", "gta 6 live", "gta 6 ao vivo", "gta vi"],
     "exigir_no_titulo": ["gta 6", "gta vi", "gta6", "gtavi"],
     "canais": [],

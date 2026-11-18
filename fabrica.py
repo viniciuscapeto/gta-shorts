@@ -800,8 +800,15 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
                             ("ended_at", agora.strftime(fmt))]
     idiomas = tuple(i.lower() for i in desc.get("idiomas", ["pt"]))
 
+    proibidos = [p.lower() for p in tw.get("bloquear_no_titulo", [])]
+
+    def titulo_ok(c):
+        t = f" {(c.get('title') or '').lower()} "
+        return not any(p in t for p in proibidos)
+
     def bom(c, minimo, qualquer_jogo=False):
         return ((qualquer_jogo or c["game_id"] in ids_jogos) and c["id"] not in usados
+                and titulo_ok(c)
                 and c["broadcaster_name"].lower() not in bloqueados
                 and c["view_count"] >= minimo
                 and c["duration"] >= tw.get("min_segundos", 8))
@@ -838,15 +845,21 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
     # (1b) quem está AO VIVO agora no jogo: clipes que o chat fez nas últimas horas
     vivo = tw.get("ao_vivo", {})
     if vivo.get("ativar", True) and ids_jogos:
-        params = [("game_id", g) for g in ids_jogos] + [("first", 100)]
-        # "idiomas": [] = lives de qualquer idioma
-        params += [("language", i) for i in vivo.get("idiomas", list(idiomas))]
-        lives = _twitch_get("streams", params, cab)["data"]
-        lives = [s for s in lives if s["viewer_count"] >= vivo.get("min_espectadores", 0)]
-        lives.sort(key=lambda s: -s["viewer_count"])
-        lives = lives[:vivo.get("max_lives", 15)]
-        print(f"   Ao vivo agora: {len(lives)} live(s)"
-              + (" - " + ", ".join(f"{s['user_name']} ({s['viewer_count']})" for s in lives[:8]) if lives else ""))
+        # cada grupo: idiomas, mínimo de espectadores e quantas lives (brasileiros primeiro)
+        grupos = vivo.get("grupos", [{"nome": "BR", "idiomas": ["pt"], "min_espectadores": 300, "max_lives": 15}])
+        lives, vistos = [], set()
+        for g in grupos:
+            params = [("game_id", j) for j in ids_jogos] + [("first", 100)]
+            params += [("language", i) for i in g.get("idiomas", [])]  # [] = qualquer idioma
+            achadas = [s for s in _twitch_get("streams", params, cab)["data"]
+                       if s["viewer_count"] >= g.get("min_espectadores", 0) and s["user_id"] not in vistos]
+            achadas.sort(key=lambda s: -s["viewer_count"])
+            achadas = achadas[:g.get("max_lives", 10)]
+            vistos |= {s["user_id"] for s in achadas}
+            lives += achadas
+            print(f"   Ao vivo agora ({g.get('nome', '?')}): {len(achadas)} live(s)"
+                  + (" - " + ", ".join(f"{s['user_name']} ({s['viewer_count']})" for s in achadas[:10])
+                     if achadas else ""))
         antes = len(escolhidos)
         for s in lives:
             achados = _paginar_clipes(
@@ -886,7 +899,9 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
     for c in escolhidos.values():
         c["_login"] = logins.get(c["broadcaster_id"], c["broadcaster_name"].lower())
         c["_autorizado"] = c["_login"] in autorizados
-    return sorted(escolhidos.values(), key=lambda c: -c["view_count"])
+    # brasileiros (e os da sua lista) primeiro; depois os gringos, cada grupo do mais visto pro menos
+    br = lambda c: (c.get("language") or "").lower().startswith("pt") or c["_login"] in streamers
+    return sorted(escolhidos.values(), key=lambda c: (not br(c), -c["view_count"]))
 
 
 def baixar_clipe(clipe: dict):
@@ -1375,6 +1390,9 @@ def modo_youtube(cfg, so_listar=False):
         print("Falta o yt-dlp. Rode:  python -m pip install yt-dlp")
         return
     yt = cfg["youtube"]
+    if not yt.get("ativar", True):
+        print("YouTube desligado no config (youtube.ativar = false).")
+        return
     print("Procurando os vídeos de GTA mais vistos no YouTube...")
     videos = buscar_youtube(cfg)
     if not videos:
