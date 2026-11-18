@@ -63,6 +63,8 @@
     "descobrir": {
       "ativar": true,
       "idiomas": ["pt"],
+      "todos_os_jogos": true,
+      "top_jogos": 15,
       "dias": 7,
       "min_visualizacoes": 300,
       "max_clipes": 10,

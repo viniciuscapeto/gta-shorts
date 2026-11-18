@@ -807,12 +807,20 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
                 and c["duration"] >= tw.get("min_segundos", 8))
 
     escolhidos = {}
-    # (1) os virais da Twitch inteira
+    # (1) os virais da Twitch inteira: dos jogos configurados ou, com "todos_os_jogos",
+    #     dos jogos/categorias mais assistidos agora (a Twitch não deixa buscar "tudo" de uma vez)
     if desc.get("ativar", True):
         minimo = desc.get("min_visualizacoes", tw.get("min_visualizacoes", 0))
-        filtro = lambda c: bom(c, minimo) and (c.get("language") or "").lower().startswith(idiomas)
+        geral = desc.get("todos_os_jogos", False)
+        busca_ids = set(ids_jogos)
+        if geral:
+            top = _twitch_get("games/top", [("first", desc.get("top_jogos", 15))], cab)["data"]
+            busca_ids |= {g["id"] for g in top}
+            print("   Categorias em alta: " + ", ".join(g["name"] for g in top))
+        filtro = lambda c: (bom(c, minimo, geral)
+                            and (c.get("language") or "").lower().startswith(idiomas))
         achados = []
-        for gid in ids_jogos:
+        for gid in busca_ids:
             achados += _paginar_clipes([("game_id", gid)] + periodo(desc.get("dias", 3)), cab,
                                        filtro, desc.get("paginas", 5), 999)
         achados.sort(key=lambda c: -c["view_count"])
@@ -825,7 +833,8 @@ def buscar_clipes(cfg: dict, cab: dict) -> list:
             escolhidos[c["id"]] = c
             if len(escolhidos) >= desc.get("max_clipes", 10):
                 break
-        print(f"   Virais de GTA ({'/'.join(idiomas)}): {len(escolhidos)} clipe(s) novo(s)")
+        print(f"   Virais {'gerais' if geral else 'de GTA'} ({'/'.join(idiomas)}): "
+              f"{len(escolhidos)} clipe(s) novo(s)")
     # (2) os streamers da lista: todos (os sem "liberou" chegam com aviso pra você decidir),
     #     e de qualquer jogo se "streamers_qualquer_jogo" estiver ligado
     lista = set(streamers) - bloqueados
