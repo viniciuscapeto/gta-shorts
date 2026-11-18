@@ -67,15 +67,38 @@ jobs:
           EOF
 
       - name: Marcar o que você aprovou no Telegram
-        run: python fabrica.py --telegram-respostas || true
+        run: python -u fabrica.py --telegram-respostas 2>&1 | tee -a rodada.log || true
 
       - name: Twitch
         if: github.event_name == 'schedule' || inputs.fonte != 'youtube'
-        run: python fabrica.py --twitch --sem-legenda || true
+        run: |
+          echo "===== TWITCH =====" >> rodada.log
+          python -u fabrica.py --twitch --sem-legenda 2>&1 | tee -a rodada.log || true
 
       - name: YouTube
         if: github.event_name == 'schedule' || inputs.fonte != 'twitch'
-        run: python fabrica.py --youtube --sem-legenda || true
+        run: |
+          echo "===== YOUTUBE =====" >> rodada.log
+          python -u fabrica.py --youtube --sem-legenda 2>&1 | tee -a rodada.log || true
+
+      # resumo da rodada no seu Telegram (o registro do GitHub só abre logado)
+      - name: Resumo no Telegram
+        if: always()
+        run: |
+          python - <<'EOF'
+          import html, json, os, urllib.request
+          try:
+              linhas = open("rodada.log", encoding="utf-8", errors="ignore").read().splitlines()
+          except FileNotFoundError:
+              linhas = ["(sem registro: a rodada parou antes de começar)"]
+          linhas = [l for l in linhas if l.strip()][-45:]
+          texto = "🤖 <b>Rodada da nuvem</b>\n<pre>" + html.escape("\n".join(linhas))[-3700:] + "</pre>"
+          dados = json.dumps({"chat_id": os.environ["TELEGRAM_CHAT_ID"], "text": texto,
+                              "parse_mode": "HTML", "disable_notification": True}).encode()
+          req = urllib.request.Request(f"https://api.telegram.org/bot{os.environ['TELEGRAM_TOKEN']}/sendMessage",
+                                       data=dados, headers={"Content-Type": "application/json"})
+          print(urllib.request.urlopen(req, timeout=30).status)
+          EOF
 
       - name: Apagar as chaves
         if: always()
