@@ -28,6 +28,7 @@ jobs:
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
       TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      INSTAGRAM_TOKEN: ${{ secrets.INSTAGRAM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +57,9 @@ jobs:
             saida/.clipes_usados.txt
             saida/.youtube_usados.txt
             saida/.tg_offset
+            saida/.ig_postados.txt
+            saida/.ig_ultimo
+            saida/aprovados
           key: estado-${{ github.run_id }}
           restore-keys: estado-
 
@@ -79,6 +83,12 @@ jobs:
 
       - name: Marcar o que você aprovou no Telegram
         run: python -u fabrica.py --telegram-respostas 2>&1 | tee -a rodada.log || true
+
+      # aprovados vão pro Instagram sozinhos (1 por rodada, respeitando o intervalo)
+      - name: Postar no Instagram
+        run: |
+          echo "===== INSTAGRAM =====" >> rodada.log
+          python -u fabrica.py --postar-instagram 2>&1 | tee -a rodada.log || true
 
       - name: Twitch
         if: github.event_name == 'schedule' || inputs.fonte != 'youtube'

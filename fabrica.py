@@ -1129,18 +1129,125 @@ def telegram_respostas_nuvem():
     arq = SAIDA / ".tg_offset"
     offset = int(arq.read_text().strip() or 0) if arq.exists() else 0
     r = _tg(token, "getUpdates", {"offset": offset, "timeout": 0, "allowed_updates": ["callback_query"]})
+    pela_nuvem = instagram_token() is not None  # com a API do Instagram, a nuvem cuida de tudo
     n = 0
+    cfg = carregar_config()
     for u in r.get("result", []):
         q = u.get("callback_query")
         dado = (q or {}).get("data", "")
-        if q and dado.startswith(("ok:", "no:", "x:")):
+        if q and dado.startswith(("ok:", "no:", "x:")) and not pela_nuvem:
             break  # clique pro painel do PC (vídeo local ou "baixar de novo"): deixa pra ele
         offset = u["update_id"] + 1
-        if q and str(q["message"]["chat"]["id"]) == chat and dado[:3] in ("nok", "nno"):
+        if not q or str(q["message"]["chat"]["id"]) != chat:
+            continue
+        aprovado_de_novo = dado.startswith("x:") and "APROVADO" in json.dumps(
+            q["message"].get("reply_markup", {}), ensure_ascii=False)
+        if dado[:3] in ("nok", "nno"):
             _tg_marcar(token, chat, q, dado.startswith("nok"))
             n += 1
+        if pela_nuvem and (dado.startswith("nok") or aprovado_de_novo):
+            try:
+                if baixar_aprovado_da_nuvem(token, q["message"], cfg):
+                    print("   -> na fila do Instagram")
+            except Exception as e:  # noqa: BLE001
+                print(f"   [erro ao baixar aprovado: {e}]")
     arq.write_text(str(offset))
     print(f"Telegram: {n} decisão(ões) marcadas")
+
+
+# ---------------------------------------------------------------- Instagram (API oficial)
+IG_VER = os.environ.get("IG_API_VERSION", "v24.0")
+IG_POSTADOS = SAIDA / ".ig_postados.txt"
+IG_ULTIMO = SAIDA / ".ig_ultimo"
+
+
+def instagram_token():
+    t = os.environ.get("INSTAGRAM_TOKEN") or str(ler_segredos().get("instagram_token", ""))
+    return t.strip() or None
+
+
+def _ig(metodo: str, url: str, dados: dict = None, corpo: bytes = None, cab: dict = None,
+        timeout: int = 120) -> dict:
+    if dados is not None:
+        corpo = urllib.parse.urlencode(dados).encode()
+    req = urllib.request.Request(url, data=corpo, method=metodo, headers=cab or {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        try:
+            erro = json.loads(e.read().decode("utf-8")).get("error", {})
+        except Exception:  # noqa: BLE001
+            erro = {}
+        raise RuntimeError(f"Instagram {e.code}: {erro.get('message') or erro or e.reason}") from None
+
+
+def instagram_postar_reel(video: Path, legenda: str, token: str) -> str:
+    """Posta um Reel pela API oficial (upload direto do arquivo). Devolve o link do post."""
+    g = f"https://graph.instagram.com/{IG_VER}"
+    eu = _ig("GET", f"{g}/me?fields=user_id,username&access_token={token}")
+    uid = eu.get("user_id") or eu.get("id")
+    cont = _ig("POST", f"{g}/{uid}/media", {"media_type": "REELS", "upload_type": "resumable",
+                                            "caption": legenda[:2200], "share_to_feed": "true",
+                                            "access_token": token})
+    cid = cont["id"]
+    dados = video.read_bytes()
+    _ig("POST", f"https://rupload.facebook.com/ig-api-upload/{IG_VER}/{cid}", corpo=dados,
+        cab={"Authorization": f"OAuth {token}", "offset": "0", "file_size": str(len(dados))},
+        timeout=600)
+    for _ in range(60):  # o Instagram processa o vídeo (normalmente < 1 min)
+        st = _ig("GET", f"{g}/{cid}?fields=status_code,status&access_token={token}")
+        if st.get("status_code") == "FINISHED":
+            break
+        if st.get("status_code") in ("ERROR", "EXPIRED"):
+            raise RuntimeError(f"Instagram recusou o vídeo: {st.get('status')}")
+        time.sleep(10)
+    else:
+        raise RuntimeError("Instagram demorou demais pra processar o vídeo")
+    pub = _ig("POST", f"{g}/{uid}/media_publish", {"creation_id": cid, "access_token": token})
+    try:
+        return _ig("GET", f"{g}/{pub['id']}?fields=permalink&access_token={token}").get("permalink", "")
+    except Exception:  # noqa: BLE001
+        return f"https://www.instagram.com/{eu.get('username', '')}/"
+
+
+def modo_postar_instagram():
+    """Posta no Instagram o aprovado mais antigo da fila, respeitando o intervalo."""
+    token = instagram_token()
+    if not token:
+        print("Instagram: sem INSTAGRAM_TOKEN, nada a fazer.")
+        return
+    cfg = carregar_config()
+    intervalo = cfg.get("instagram", {}).get("intervalo_min", 22) * 60
+    ultimo = float(IG_ULTIMO.read_text().strip() or 0) if IG_ULTIMO.exists() else 0
+    if time.time() - ultimo < intervalo:
+        print(f"Instagram: último post há {int((time.time() - ultimo) / 60)} min, esperando o intervalo.")
+        return
+    feitos = set(IG_POSTADOS.read_text(encoding="utf-8").split()) if IG_POSTADOS.exists() else set()
+    fila = sorted((p for p in APROVADOS.glob("*.mp4") if p.name not in feitos),
+                  key=lambda p: p.stat().st_mtime) if APROVADOS.exists() else []
+    print(f"Instagram: {len(fila)} na fila")
+    if not fila:
+        return
+    video = fila[0]
+    _, legenda = _ler_txt(video.with_suffix(".txt"))
+    tg = telegram_conectar(avisar=False)
+    try:
+        link = instagram_postar_reel(video, legenda or cfg.get("seu_arroba", ""), token)
+    except Exception as e:  # noqa: BLE001
+        print(f"   [Instagram: {e}]")
+        if tg:
+            _tg(tg[0], "sendMessage", {"chat_id": tg[1], "text": f"⚠️ Não consegui postar no Instagram: {e}"})
+        return
+    with open(IG_POSTADOS, "a", encoding="utf-8") as f:
+        f.write(video.name + "\n")
+    IG_ULTIMO.write_text(str(time.time()))
+    for ext in (".mp4", ".txt", ".json"):
+        video.with_suffix(ext).unlink(missing_ok=True)  # libera espaço na nuvem
+    print(f"   📸 postado no Instagram: {link}")
+    if tg:
+        _tg(tg[0], "sendMessage", {"chat_id": tg[1], "disable_notification": True,
+                                   "text": f"📸 Postado no Instagram ({len(fila) - 1} na fila)\n{link}"})
 
 
 def mover_video(nome: str, pasta: Path) -> bool:
@@ -1595,7 +1702,8 @@ if __name__ == "__main__":
                                                       "--curiosidade", "--twitch-listar",
                                                       "--youtube-listar",
                                                       "--aprovar", "--testar-telegram",
-                                                      "--painel", "--telegram-respostas"} & set(sys.argv):
+                                                      "--painel", "--telegram-respostas",
+                                                      "--postar-instagram"} & set(sys.argv):
         # Windows: baixa o whisper.cpp; Linux/nuvem: usa o faster-whisper (pip)
         if not (sys.platform != "win32" and _tem_faster_whisper()) and not preparar_whisper(cfg):
             print("   Seguindo SEM legenda (rode de novo com internet pra baixar o whisper).")
@@ -1606,6 +1714,8 @@ if __name__ == "__main__":
         modo_painel()
     elif "--telegram-respostas" in sys.argv:
         telegram_respostas_nuvem()
+    elif "--postar-instagram" in sys.argv:
+        modo_postar_instagram()
     elif "--aprovar" in sys.argv:
         modo_aprovar()
     elif "--testar-telegram" in sys.argv:

@@ -119,6 +119,8 @@ def ouvir_telegram():
         return True
     if not str(F.ler_segredos().get("telegram_token", "")).strip():
         return False
+    if F.carregar_config().get("instagram", {}).get("postar_pela_nuvem"):
+        return False  # quem lê as aprovações agora é a nuvem (senão um "rouba" o clique do outro)
     TELEGRAM["thread"] = threading.Thread(target=F.modo_aprovar, daemon=True)
     TELEGRAM["thread"].start()
     return True

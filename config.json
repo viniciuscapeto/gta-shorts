@@ -114,6 +114,11 @@
     "hashtags": ["#gta6", "#gtavi", "#gta", "#vicecity", "#twitch", "#clips", "#fyp", "#viral", "#shorts"]
   },
 
+  "instagram": {
+    "postar_pela_nuvem": false,
+    "intervalo_min": 22
+  },
+
   "youtube": {
     "ativar": false,
     "buscas": ["gta 6", "gta 6 gameplay", "gta 6 live", "gta 6 ao vivo", "gta vi"],
