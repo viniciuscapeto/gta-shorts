@@ -104,7 +104,9 @@ jobs:
           except FileNotFoundError:
               linhas = ["(sem registro: a rodada parou antes de começar)"]
           linhas = [l for l in linhas if l.strip()][-45:]
-          texto = "🤖 <b>Rodada da nuvem</b>\n<pre>" + html.escape("\n".join(linhas))[-3700:] + "</pre>"
+          cab = (f"🤖 <b>Rodada da nuvem #{os.environ.get('GITHUB_RUN_NUMBER', '?')}</b> · "
+                 f"versão {os.environ.get('GITHUB_SHA', '?')[:7]}")
+          texto = cab + "\n<pre>" + html.escape("\n".join(linhas))[-3700:] + "</pre>"
           dados = json.dumps({"chat_id": os.environ["TELEGRAM_CHAT_ID"], "text": texto,
                               "parse_mode": "HTML", "disable_notification": True}).encode()
           req = urllib.request.Request(f"https://api.telegram.org/bot{os.environ['TELEGRAM_TOKEN']}/sendMessage",
